@@ -1,0 +1,1 @@
+ALTER TABLE exercises ADD COLUMN duration REAL DEFAULT 0;
