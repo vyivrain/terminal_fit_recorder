@@ -10,10 +10,14 @@ import (
 	"terminal_fit_recorder/internal/utils"
 )
 
-type SaveExerciseCommand struct{}
+type SaveExerciseCommand struct {
+	InputProvider ui.InputProvider
+}
 
 func NewSaveExerciseCommand() *SaveExerciseCommand {
-	return &SaveExerciseCommand{}
+	return &SaveExerciseCommand{
+		InputProvider: ui.NewDefaultInputProvider(),
+	}
 }
 
 func (cmd *SaveExerciseCommand) Name() string {
@@ -28,9 +32,9 @@ func (cmd *SaveExerciseCommand) HelpManual() string {
 	return "terminal_fit_recorder exercise save\n    Start an interactive session to save a new workout with exercises."
 }
 
-func (cmd *SaveExerciseCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *SaveExerciseCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	// Get workout type using checkbox
-	workoutType, cancelled := ui.GetInputWithType("Workout type:", []string{"strength", "cardio"}, ui.InputTypeCheckbox)
+	workoutType, cancelled := cmd.InputProvider.GetInputWithType("Workout type:", []string{"strength", "cardio"}, ui.InputTypeCheckbox)
 	if cancelled {
 		fmt.Println("\nWorkout cancelled")
 		return nil
@@ -48,35 +52,40 @@ func (cmd *SaveExerciseCommand) Execute(database *db.DB, ollamaClient *api.Clien
 	var exercises []db.Exercise
 
 	for {
-		name, cancelled := ui.GetInputWithType("Exercise name: ", existingNames, ui.InputTypeAutocomplete)
+		name, cancelled := cmd.InputProvider.GetInputWithType("Exercise name: ", existingNames, ui.InputTypeAutocomplete)
 		if cancelled {
 			fmt.Println("\nWorkout cancelled")
 			return nil
 		}
 
-		weight, cancelled := ui.GetInputWithType("Weight: ", nil, ui.InputTypeText)
+		weight, cancelled := cmd.InputProvider.GetInputWithType("Weight: ", nil, ui.InputTypeText)
 		if cancelled {
 			fmt.Println("\nWorkout cancelled")
 			return nil
 		}
 
-		reps, cancelled := ui.GetInputWithType("Repetitions: ", nil, ui.InputTypeText)
+		reps, cancelled := cmd.InputProvider.GetInputWithType("Repetitions: ", nil, ui.InputTypeText)
 		if cancelled {
 			fmt.Println("\nWorkout cancelled")
 			return nil
 		}
 
-		sets, cancelled := ui.GetInputWithType("Number of sets: ", nil, ui.InputTypeText)
+		sets, cancelled := cmd.InputProvider.GetInputWithType("Number of sets: ", nil, ui.InputTypeText)
 		if cancelled {
 			fmt.Println("\nWorkout cancelled")
 			return nil
 		}
+
+		// Convert weight, reps, and sets strings to int
+		weightInt := utils.ParseWeight(weight)
+		repsInt := utils.ParseInt(reps)
+		setsInt := utils.ParseInt(sets)
 
 		exercise := db.Exercise{
 			Name:        name,
-			Weight:      weight,
-			Repetitions: reps,
-			Sets:        sets,
+			Weight:      weightInt,
+			Repetitions: repsInt,
+			Sets:        setsInt,
 		}
 
 		// Check if duration is required for this exercise
@@ -90,7 +99,7 @@ func (cmd *SaveExerciseCommand) Execute(database *db.DB, ollamaClient *api.Clien
 		}
 
 		if requiresDuration {
-			durationStr, cancelled := ui.GetInputWithType("Duration (minutes): ", nil, ui.InputTypeText)
+			durationStr, cancelled := cmd.InputProvider.GetInputWithType("Duration (minutes): ", nil, ui.InputTypeText)
 			if cancelled {
 				fmt.Println("\nWorkout cancelled")
 				return nil
@@ -108,15 +117,15 @@ func (cmd *SaveExerciseCommand) Execute(database *db.DB, ollamaClient *api.Clien
 		exercises = append(exercises, exercise)
 
 		if exercise.Duration > 0 {
-			fmt.Printf("\nRecorded: %s - %s weight, %s reps, %s sets, %.2f minutes\n",
+			fmt.Printf("\nRecorded: %s - %d kg weight, %d reps, %d sets, %.2f minutes\n",
 				exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration)
 		} else {
-			fmt.Printf("\nRecorded: %s - %s weight, %s reps, %s sets\n",
+			fmt.Printf("\nRecorded: %s - %d kg weight, %d reps, %d sets\n",
 				exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets)
 		}
 
 		for {
-			finished, cancelled := ui.GetInputWithType("Finished?", []string{"no", "yes", "review"}, ui.InputTypeCheckbox)
+			finished, cancelled := cmd.InputProvider.GetInputWithType("Finished?", []string{"no", "yes", "review"}, ui.InputTypeCheckbox)
 			if cancelled {
 				fmt.Println("\nWorkout cancelled")
 				return nil

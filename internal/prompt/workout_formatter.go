@@ -61,22 +61,22 @@ func formatWorkoutData(workouts []db.WorkoutWithExercises) string {
 			sb.WriteString("|")
 
 			// Weight
-			if ex.Weight != "" && ex.Weight != "0" {
-				sb.WriteString(ex.Weight)
+			if ex.Weight > 0 {
+				sb.WriteString(fmt.Sprintf("%d kg", ex.Weight))
 			} else {
 				sb.WriteString("-")
 			}
 			sb.WriteString("|")
 
 			// Reps × Sets
-			if (ex.Repetitions != "" && ex.Repetitions != "0") || (ex.Sets != "" && ex.Sets != "0") {
-				reps := ex.Repetitions
-				if reps == "" || reps == "0" {
-					reps = "-"
+			if ex.Repetitions > 0 || ex.Sets > 0 {
+				reps := "-"
+				if ex.Repetitions > 0 {
+					reps = fmt.Sprintf("%d", ex.Repetitions)
 				}
-				sets := ex.Sets
-				if sets == "" || sets == "0" {
-					sets = "-"
+				sets := "-"
+				if ex.Sets > 0 {
+					sets = fmt.Sprintf("%d", ex.Sets)
 				}
 				sb.WriteString(fmt.Sprintf("%s×%s", reps, sets))
 			} else {

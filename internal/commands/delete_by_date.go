@@ -28,7 +28,7 @@ func (cmd *DeleteByDateCommand) HelpManual() string {
 	return ""
 }
 
-func (cmd *DeleteByDateCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *DeleteByDateCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	err := database.DeleteWorkoutByDate(cmd.Date)
 	if err != nil {
 		return fmt.Errorf("error deleting workout: %v", err)

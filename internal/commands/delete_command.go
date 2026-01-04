@@ -39,7 +39,7 @@ func (cmd *DeleteCommand) Validate() error {
 		dateStr := cmd.Args[4]
 		date, err := utils.ParseEUDate(dateStr)
 		if err != nil {
-			return fmt.Errorf("invalid date format. Use DD-MM-YY (e.g., 01-10-25): %v", err)
+			return fmt.Errorf("invalid date format. Use DD-MM-YY (e.g., 31-12-25): %v", err)
 		}
 		cmd.command = NewDeleteByDateCommand(date)
 		return cmd.command.Validate()
@@ -48,10 +48,10 @@ func (cmd *DeleteCommand) Validate() error {
 	}
 }
 
-func (cmd *DeleteCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *DeleteCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	return cmd.command.Execute(database, ollamaClient)
 }
 
 func (cmd *DeleteCommand) HelpManual() string {
-	return "terminal_fit_recorder exercise delete last\n    Delete the most recent workout.\n\nterminal_fit_recorder exercise delete date <DD-MM-YY>\n    Delete workout by specific date (e.g., 01-10-25)."
+	return "terminal_fit_recorder exercise delete last\n    Delete the most recent workout.\n\nterminal_fit_recorder exercise delete date <DD-MM-YY>\n    Delete workout by specific date (e.g., 31-12-25)."
 }

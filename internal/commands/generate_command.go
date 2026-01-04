@@ -33,7 +33,7 @@ func (cmd *GenerateCommandWrapper) Validate() error {
 	return cmd.command.Validate()
 }
 
-func (cmd *GenerateCommandWrapper) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *GenerateCommandWrapper) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	return cmd.command.Execute(database, ollamaClient)
 }
 

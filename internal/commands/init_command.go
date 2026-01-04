@@ -27,7 +27,7 @@ func (cmd *InitCommand) HelpManual() string {
 	return "terminal_fit_recorder exercise init\n    Initialize the database in ~/.terminal_fit_recorder/exercises.db"
 }
 
-func (cmd *InitCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *InitCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	// Get user home directory
 	homeDir, err := os.UserHomeDir()
 	if err != nil {

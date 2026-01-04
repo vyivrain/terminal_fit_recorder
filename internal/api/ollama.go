@@ -234,9 +234,9 @@ func ParseWorkoutResponse(jsonResponse string) (*db.WorkoutWithExercises, error)
 	for _, aiEx := range aiWorkout.Exercises {
 		ex := db.Exercise{
 			Name:        aiEx.Name,
-			Weight:      convertToString(aiEx.Weight),
-			Repetitions: convertToString(aiEx.Reps),
-			Sets:        convertToString(aiEx.Sets),
+			Weight:      convertToInt(aiEx.Weight),
+			Repetitions: convertToInt(aiEx.Reps),
+			Sets:        convertToInt(aiEx.Sets),
 			Duration:    convertToFloat(aiEx.Duration),
 		}
 		exercises = append(exercises, ex)
@@ -269,6 +269,36 @@ func convertToString(val interface{}) string {
 		return strconv.Itoa(v)
 	default:
 		return "0"
+	}
+}
+
+// convertToInt converts interface{} to int (handles "-", numbers, strings)
+func convertToInt(val interface{}) int {
+	if val == nil {
+		return 0
+	}
+
+	switch v := val.(type) {
+	case string:
+		if v == "-" || v == "" {
+			return 0
+		}
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			// Try parsing as float first, then convert to int
+			f, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return 0
+			}
+			return int(f)
+		}
+		return i
+	case float64:
+		return int(v)
+	case int:
+		return v
+	default:
+		return 0
 	}
 }
 

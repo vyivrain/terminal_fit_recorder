@@ -15,6 +15,11 @@ type DB struct {
 }
 
 func New(dbPath string) (*DB, error) {
+	// For in-memory databases, use shared cache mode so all connections see the same data
+	if dbPath == ":memory:" {
+		dbPath = "file::memory:?cache=shared"
+	}
+
 	conn, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, err
@@ -58,4 +63,8 @@ func (db *DB) runMigrations() error {
 	}
 
 	return nil
+}
+
+func (db *DB) GetConn() *sql.DB {
+	return db.conn
 }

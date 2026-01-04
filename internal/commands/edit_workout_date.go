@@ -32,7 +32,7 @@ func (cmd *EditWorkoutDateCommand) HelpManual() string {
 	return ""
 }
 
-func (cmd *EditWorkoutDateCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *EditWorkoutDateCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	err := database.UpdateWorkoutDate(cmd.OldDate, cmd.NewDate)
 	if err != nil {
 		return fmt.Errorf("error updating workout date: %v", err)

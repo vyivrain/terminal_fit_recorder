@@ -6,7 +6,7 @@ import (
 )
 
 type Command interface {
-	Execute(database *db.DB, ollamaClient *api.Client) error
+	Execute(database *db.DB, ollamaClient api.OllamaClient) error
 	Name() string
 	Validate() error
 	HelpManual() string

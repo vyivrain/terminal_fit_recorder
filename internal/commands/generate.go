@@ -14,11 +14,13 @@ import (
 
 type GenerateCommand struct {
 	ExerciseCount int
+	InputProvider ui.InputProvider
 }
 
 func NewGenerateCommand(exerciseCount int) *GenerateCommand {
 	return &GenerateCommand{
 		ExerciseCount: exerciseCount,
+		InputProvider: ui.NewDefaultInputProvider(),
 	}
 }
 
@@ -37,7 +39,7 @@ func (cmd *GenerateCommand) HelpManual() string {
 	return ""
 }
 
-func (cmd *GenerateCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *GenerateCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	// Increased timeout to 5 minutes for longer responses
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -55,9 +57,10 @@ func (cmd *GenerateCommand) Execute(database *db.DB, ollamaClient *api.Client) e
 	}
 
 	// Build prompt with workout data
-	promptText := prompt.BuildPrompt(workouts, cmd.ExerciseCount, ollamaClient.CustomPrompt)
+	promptText := prompt.BuildPrompt(workouts, cmd.ExerciseCount, ollamaClient.GetCustomPrompt())
 
-	fmt.Println("Sending request to Ollama...\n")
+	fmt.Println("Sending request to Ollama...")
+	fmt.Println()
 
 	// Use streaming to show real-time response and avoid timeouts
 	response, err := ollamaClient.SendPromptStream(ctx, promptText)
@@ -76,7 +79,7 @@ func (cmd *GenerateCommand) Execute(database *db.DB, ollamaClient *api.Client) e
 	fmt.Println(formattedWorkout)
 
 	// Ask user if they want to save the workout
-	saveWorkout, cancelled := ui.GetInputWithType("\nSave this workout as 'planned'?", []string{"yes", "no"}, ui.InputTypeCheckbox)
+	saveWorkout, cancelled := cmd.InputProvider.GetInputWithType("\nSave this workout as 'planned'?", []string{"yes", "no"}, ui.InputTypeCheckbox)
 	if cancelled {
 		fmt.Println("\nWorkout discarded")
 		return nil

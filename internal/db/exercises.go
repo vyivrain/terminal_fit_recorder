@@ -5,9 +5,9 @@ import "time"
 type Exercise struct {
 	ID          int
 	Name        string
-	Weight      string
-	Repetitions string
-	Sets        string
+	Weight      int     // Weight in kg (0 for bodyweight exercises)
+	Repetitions int     // Number of repetitions (0 for duration-based exercises)
+	Sets        int     // Number of sets
 	Duration    float64 // Duration in minutes (required for exercises like planks)
 	WorkoutID   int
 	CreatedAt   time.Time

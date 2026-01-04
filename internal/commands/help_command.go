@@ -26,7 +26,7 @@ func (cmd *HelpCommand) HelpManual() string {
 	return "terminal_fit_recorder exercise help\n    Display this help message with all available commands."
 }
 
-func (cmd *HelpCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *HelpCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	var output strings.Builder
 
 	output.WriteString("terminal_fit_recorder - Personal fitness workout recorder tool\n\n")

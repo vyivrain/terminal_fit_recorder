@@ -53,12 +53,12 @@ func (cmd *EditCommand) Validate() error {
 
 		oldDate, err := utils.ParseEUDate(oldDateStr)
 		if err != nil {
-			return fmt.Errorf("invalid old date format. Use DD-MM-YY (e.g., 01-10-25): %v", err)
+			return fmt.Errorf("invalid old date format. Use DD-MM-YY (e.g., 31-12-25): %v", err)
 		}
 
 		newDate, err := utils.ParseEUDate(newDateStr)
 		if err != nil {
-			return fmt.Errorf("invalid new date format. Use DD-MM-YY (e.g., 01-10-25): %v", err)
+			return fmt.Errorf("invalid new date format. Use DD-MM-YY (e.g., 31-12-25): %v", err)
 		}
 
 		cmd.command = NewEditWorkoutDateCommand(oldDate, newDate)
@@ -68,16 +68,16 @@ func (cmd *EditCommand) Validate() error {
 	// Otherwise it's "edit <date>" for editing workout content
 	date, err := utils.ParseEUDate(editTarget)
 	if err != nil {
-		return fmt.Errorf("invalid date format. Use DD-MM-YY (e.g., 01-10-25): %v", err)
+		return fmt.Errorf("invalid date format. Use DD-MM-YY (e.g., 31-12-25): %v", err)
 	}
 	cmd.command = NewEditWorkoutCommand(date)
 	return cmd.command.Validate()
 }
 
-func (cmd *EditCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *EditCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	return cmd.command.Execute(database, ollamaClient)
 }
 
 func (cmd *EditCommand) HelpManual() string {
-	return "terminal_fit_recorder exercise edit <DD-MM-YY>\n    Edit a workout by date (e.g., 01-10-25).\n\nterminal_fit_recorder exercise edit date <DD-MM-YY> <DD-MM-YY>\n    Change workout date from old to new date.\n\nterminal_fit_recorder exercise edit last status <planned|completed>\n    Update the status of the last workout."
+	return "terminal_fit_recorder exercise edit <DD-MM-YY>\n    Edit a workout by date (e.g., 31-12-25).\n\nterminal_fit_recorder exercise edit date <DD-MM-YY> <DD-MM-YY>\n    Change workout date from old to new date.\n\nterminal_fit_recorder exercise edit last status <planned|completed>\n    Update the status of the last workout."
 }

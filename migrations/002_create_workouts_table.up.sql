@@ -5,11 +5,11 @@ CREATE TABLE workouts (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create a default strength workout for existing exercises
+-- Create a default strength workout for existing exercises (only if exercises exist)
 INSERT INTO workouts (workout_type, created_at, updated_at)
 SELECT 'strength', MIN(created_at), MAX(updated_at)
 FROM exercises
-WHERE EXISTS (SELECT 1 FROM exercises);
+HAVING COUNT(*) > 0;
 
 -- Add workout_id column to exercises table
 ALTER TABLE exercises ADD COLUMN workout_id INTEGER REFERENCES workouts(id);

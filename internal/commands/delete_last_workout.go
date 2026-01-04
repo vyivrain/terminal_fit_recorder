@@ -25,7 +25,7 @@ func (cmd *DeleteLastWorkoutCommand) HelpManual() string {
 	return ""
 }
 
-func (cmd *DeleteLastWorkoutCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *DeleteLastWorkoutCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	// First, get the last workout to show the date
 	workout, err := database.GetLastWorkout()
 	if err != nil {

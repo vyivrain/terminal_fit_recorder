@@ -8,6 +8,7 @@ import (
 	"terminal_fit_recorder/internal/api"
 	"terminal_fit_recorder/internal/db"
 	"terminal_fit_recorder/internal/ui"
+	"terminal_fit_recorder/internal/utils"
 )
 
 type EditWorkoutCommand struct {
@@ -33,7 +34,7 @@ func (cmd *EditWorkoutCommand) HelpManual() string {
 	return ""
 }
 
-func (cmd *EditWorkoutCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *EditWorkoutCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	// Get the workout for the specified date
 	workout, err := database.GetWorkoutByDate(cmd.Date)
 	if err != nil {
@@ -91,11 +92,16 @@ func (cmd *EditWorkoutCommand) Execute(database *db.DB, ollamaClient *api.Client
 			return nil
 		}
 
+		// Convert weight, reps, and sets strings to int
+		weightInt := utils.ParseWeight(weight)
+		repsInt := utils.ParseInt(reps)
+		setsInt := utils.ParseInt(sets)
+
 		exercise := db.Exercise{
 			Name:        name,
-			Weight:      weight,
-			Repetitions: reps,
-			Sets:        sets,
+			Weight:      weightInt,
+			Repetitions: repsInt,
+			Sets:        setsInt,
 		}
 
 		// Check if duration is required for this exercise
@@ -127,10 +133,10 @@ func (cmd *EditWorkoutCommand) Execute(database *db.DB, ollamaClient *api.Client
 		exercises = append(exercises, exercise)
 
 		if exercise.Duration > 0 {
-			fmt.Printf("\nRecorded: %s - %s weight, %s reps, %s sets, %.2f minutes\n",
+			fmt.Printf("\nRecorded: %s - %d kg weight, %d reps, %d sets, %.2f minutes\n",
 				exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration)
 		} else {
-			fmt.Printf("\nRecorded: %s - %s weight, %s reps, %s sets\n",
+			fmt.Printf("\nRecorded: %s - %d kg weight, %d reps, %d sets\n",
 				exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets)
 		}
 

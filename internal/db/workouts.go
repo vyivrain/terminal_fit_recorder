@@ -138,7 +138,17 @@ func (db *DB) SaveExercisesForWorkout(workoutID int64, exercises []Exercise) err
 
 	now := time.Now()
 	for _, exercise := range exercises {
-		_, err := tx.Exec(query, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, workoutID, now, now)
+		createdAt := exercise.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = now
+		}
+
+		updatedAt := exercise.UpdatedAt
+		if updatedAt.IsZero() {
+			updatedAt = now
+		}
+
+		_, err := tx.Exec(query, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, workoutID, createdAt, updatedAt)
 		if err != nil {
 			return err
 		}
@@ -147,12 +157,20 @@ func (db *DB) SaveExercisesForWorkout(workoutID int64, exercises []Exercise) err
 	return tx.Commit()
 }
 
-func (db *DB) CreateWorkout(workoutType string, status string) (int64, error) {
+func (db *DB) CreateWorkout(workoutType string, status string, workoutDate ...time.Time) (int64, error) {
 	now := time.Now()
 
-	// Check if a workout already exists for today
+	// Use provided date or default to now
+	var date time.Time
+	if len(workoutDate) > 0 && !workoutDate[0].IsZero() {
+		date = workoutDate[0]
+	} else {
+		date = now
+	}
+
+	// Check if a workout already exists for the specified date
 	var count int
-	err := db.conn.QueryRow(`SELECT COUNT(*) FROM workouts WHERE DATE(workout_date) = DATE(?)`, now).Scan(&count)
+	err := db.conn.QueryRow(`SELECT COUNT(*) FROM workouts WHERE DATE(workout_date) = DATE(?)`, date).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -165,7 +183,7 @@ func (db *DB) CreateWorkout(workoutType string, status string) (int64, error) {
 	INSERT INTO workouts (workout_type, workout_date, status, created_at, updated_at)
 	VALUES (?, ?, ?, ?, ?)`
 
-	result, err := db.conn.Exec(query, workoutType, now, status, now, now)
+	result, err := db.conn.Exec(query, workoutType, date, status, now, now)
 	if err != nil {
 		return 0, err
 	}

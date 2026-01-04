@@ -28,7 +28,7 @@ func (cmd *ShowLastWorkoutCommand) HelpManual() string {
 	return "terminal_fit_recorder exercise last\n    Display the most recent workout with all exercises."
 }
 
-func (cmd *ShowLastWorkoutCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *ShowLastWorkoutCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	workout, err := database.GetLastWorkout()
 	if err != nil {
 		return fmt.Errorf("error fetching last workout: %v", err)
@@ -64,7 +64,11 @@ func FormatWorkout(workout *db.WorkoutWithExercises) string {
 	fmt.Fprintln(w, "--------\t------\t----\t----")
 
 	for _, exercise := range workout.Exercises {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets)
+		weight := "-"
+		if exercise.Weight > 0 {
+			weight = fmt.Sprintf("%d kg", exercise.Weight)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%d\n", exercise.Name, weight, exercise.Repetitions, exercise.Sets)
 	}
 
 	w.Flush()
@@ -90,7 +94,7 @@ func (cmd *ShowAllWorkoutsCommand) HelpManual() string {
 	return "terminal_fit_recorder exercise all\n    Display all workouts with their exercises."
 }
 
-func (cmd *ShowAllWorkoutsCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *ShowAllWorkoutsCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	workouts, err := database.GetAllWorkouts()
 	if err != nil {
 		return fmt.Errorf("error fetching workouts: %v", err)

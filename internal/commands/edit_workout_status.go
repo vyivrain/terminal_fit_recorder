@@ -32,7 +32,7 @@ func (cmd *EditWorkoutStatusCommand) HelpManual() string {
 	return ""
 }
 
-func (cmd *EditWorkoutStatusCommand) Execute(database *db.DB, ollamaClient *api.Client) error {
+func (cmd *EditWorkoutStatusCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
 	// Get the last workout to show which one we're updating
 	lastWorkout, err := database.GetLastWorkout()
 	if err != nil {
