@@ -16,10 +16,10 @@ type Exercise struct {
 }
 
 // DurationRequiredKeywords contains exercise name keywords that require duration input
-var DurationRequiredKeywords = []string{"plank"}
+var DurationRequiredKeywords = []string{"plank", "wall sit", "hold", "stretch"}
 
 // DistanceRequiredKeywords contains exercise name keywords that require distance input
-var DistanceRequiredKeywords = []string{"run", "walk", "cycling", "cycle"}
+var DistanceRequiredKeywords = []string{"run", "walk", "cycling", "cycle", "swim", "rowing", "row"}
 
 func (db *DB) GetAllExercises() ([]Exercise, error) {
 	query := `SELECT id, name, weight, repetitions, sets, duration, distance, created_at FROM exercises ORDER BY created_at DESC`

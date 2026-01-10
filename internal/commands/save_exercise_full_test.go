@@ -235,10 +235,7 @@ func TestSaveExerciseCommand_Execute_CardioWorkout(t *testing.T) {
 	// Mock the input sequence for cardio workout
 	mockInput.On("GetInputWithType", "Workout type:", []string{"strength", "cardio"}, ui.InputTypeCheckbox).Return("cardio", false)
 	mockInput.On("GetInputWithType", "Exercise name: ", mock.Anything, ui.InputTypeAutocomplete).Return("Running", false)
-	mockInput.On("GetInputWithType", "Weight: ", mock.Anything, ui.InputTypeText).Return("0", false)
-	mockInput.On("GetInputWithType", "Repetitions: ", mock.Anything, ui.InputTypeText).Return("1", false)
-	mockInput.On("GetInputWithType", "Number of sets: ", mock.Anything, ui.InputTypeText).Return("1", false)
-	mockInput.On("GetInputWithType", "Duration (minutes): ", mock.Anything, ui.InputTypeText).Return("30", false)
+	mockInput.On("GetInputWithType", "Distance (meters): ", mock.Anything, ui.InputTypeText).Return("1000", false)
 	mockInput.On("GetInputWithType", "Finished?", []string{"no", "yes", "review"}, ui.InputTypeCheckbox).Return("yes", false)
 
 	// Create mock Ollama
@@ -261,7 +258,98 @@ func TestSaveExerciseCommand_Execute_CardioWorkout(t *testing.T) {
 	// Verify exercise
 	exercise := workout.Exercises[0]
 	assert.Equal(t, "Running", exercise.Name)
-	assert.Equal(t, 30.0, exercise.Duration)
+	assert.Equal(t, 1000, exercise.Distance)
+
+	// Verify all mocks were called
+	mockInput.AssertExpectations(t)
+}
+
+func TestSaveExerciseCommand_Execute_DistanceExerciseWithoutDuration(t *testing.T) {
+	// Setup test database
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Create mock input provider
+	mockInput := new(MockInputProvider)
+
+	// Mock the input sequence for distance-based exercise (swimming) without weight/reps/sets
+	mockInput.On("GetInputWithType", "Workout type:", []string{"strength", "cardio"}, ui.InputTypeCheckbox).Return("cardio", false)
+	mockInput.On("GetInputWithType", "Exercise name: ", mock.Anything, ui.InputTypeAutocomplete).Return("Swimming", false)
+	mockInput.On("GetInputWithType", "Distance (meters): ", mock.Anything, ui.InputTypeText).Return("500", false)
+	mockInput.On("GetInputWithType", "Finished?", []string{"no", "yes", "review"}, ui.InputTypeCheckbox).Return("yes", false)
+
+	// Create mock Ollama
+	mockOllama := new(MockOllamaClient)
+
+	// Create command and inject mock
+	cmd := NewSaveExerciseCommand()
+	cmd.InputProvider = mockInput
+
+	// Execute
+	err := cmd.Execute(database, mockOllama)
+	assert.NoError(t, err)
+
+	// Verify the workout was saved
+	workout, err := database.GetLastWorkout()
+	assert.NoError(t, err)
+	assert.NotNil(t, workout)
+	assert.Equal(t, "cardio", workout.Workout.WorkoutType)
+	assert.Len(t, workout.Exercises, 1)
+
+	// Verify exercise has distance but no weight/reps/sets
+	exercise := workout.Exercises[0]
+	assert.Equal(t, "Swimming", exercise.Name)
+	assert.Equal(t, 500, exercise.Distance)
+	assert.Equal(t, 0, exercise.Weight)
+	assert.Equal(t, 0, exercise.Repetitions)
+	assert.Equal(t, 0, exercise.Sets)
+	assert.Equal(t, 0.0, exercise.Duration)
+
+	// Verify all mocks were called
+	mockInput.AssertExpectations(t)
+}
+
+func TestSaveExerciseCommand_Execute_DistanceExerciseWithDuration(t *testing.T) {
+	// Setup test database
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Create mock input provider
+	mockInput := new(MockInputProvider)
+
+	// Mock the input sequence for distance-based exercise with duration (rowing)
+	mockInput.On("GetInputWithType", "Workout type:", []string{"strength", "cardio"}, ui.InputTypeCheckbox).Return("cardio", false)
+	mockInput.On("GetInputWithType", "Exercise name: ", mock.Anything, ui.InputTypeAutocomplete).Return("Rowing", false)
+	mockInput.On("GetInputWithType", "Duration (minutes): ", mock.Anything, ui.InputTypeText).Return("15.5", false)
+	mockInput.On("GetInputWithType", "Distance (meters): ", mock.Anything, ui.InputTypeText).Return("3000", false)
+	mockInput.On("GetInputWithType", "Finished?", []string{"no", "yes", "review"}, ui.InputTypeCheckbox).Return("yes", false)
+
+	// Create mock Ollama
+	mockOllama := new(MockOllamaClient)
+
+	// Create command and inject mock
+	cmd := NewSaveExerciseCommand()
+	cmd.InputProvider = mockInput
+
+	// Execute
+	err := cmd.Execute(database, mockOllama)
+	assert.NoError(t, err)
+
+	// Verify the workout was saved
+	workout, err := database.GetLastWorkout()
+	assert.NoError(t, err)
+	assert.NotNil(t, workout)
+	assert.Equal(t, "cardio", workout.Workout.WorkoutType)
+	assert.Len(t, workout.Exercises, 1)
+
+	// Verify exercise has both distance and duration, but no weight/reps/sets
+	exercise := workout.Exercises[0]
+	assert.Equal(t, "Rowing", exercise.Name)
+	assert.Equal(t, 3000, exercise.Distance)
+	assert.Equal(t, 15.5, exercise.Duration)
+	assert.Equal(t, 0, exercise.Weight)
+	assert.Equal(t, 0, exercise.Repetitions)
+	assert.Equal(t, 0, exercise.Sets)
 
 	// Verify all mocks were called
 	mockInput.AssertExpectations(t)
