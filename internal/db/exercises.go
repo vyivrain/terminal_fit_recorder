@@ -8,17 +8,21 @@ type Exercise struct {
 	Weight      int     // Weight in kg (0 for bodyweight exercises)
 	Repetitions int     // Number of repetitions (0 for duration-based exercises)
 	Sets        int     // Number of sets
-	Duration    float64 // Duration in minutes (required for exercises like planks)
+	Duration    float64 // Duration in minutes (required for exercises like planks, run, walk)
+	Distance    int     // Distance in meters (required for run/walk exercises)
 	WorkoutID   int
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
 
 // DurationRequiredKeywords contains exercise name keywords that require duration input
-var DurationRequiredKeywords = []string{"plank", "run", "walk"}
+var DurationRequiredKeywords = []string{"plank"}
+
+// DistanceRequiredKeywords contains exercise name keywords that require distance input
+var DistanceRequiredKeywords = []string{"run", "walk", "cycling", "cycle"}
 
 func (db *DB) GetAllExercises() ([]Exercise, error) {
-	query := `SELECT id, name, weight, repetitions, sets, duration, created_at FROM exercises ORDER BY created_at DESC`
+	query := `SELECT id, name, weight, repetitions, sets, duration, distance, created_at FROM exercises ORDER BY created_at DESC`
 
 	rows, err := db.conn.Query(query)
 	if err != nil {
@@ -29,7 +33,7 @@ func (db *DB) GetAllExercises() ([]Exercise, error) {
 	var exercises []Exercise
 	for rows.Next() {
 		var exercise Exercise
-		err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.CreatedAt)
+		err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.Distance, &exercise.CreatedAt)
 		if err != nil {
 			return nil, err
 		}

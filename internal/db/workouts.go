@@ -50,7 +50,7 @@ func (db *DB) GetAllWorkouts() ([]WorkoutWithExercises, error) {
 			workout.UpdatedAt = workout.WorkoutDate
 		}
 
-		exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
+		exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
 		exerciseRows, err := db.conn.Query(exercisesQuery, workout.ID)
 		if err != nil {
 			return nil, err
@@ -59,7 +59,7 @@ func (db *DB) GetAllWorkouts() ([]WorkoutWithExercises, error) {
 		var exercises []Exercise
 		for exerciseRows.Next() {
 			var exercise Exercise
-			err := exerciseRows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
+			err := exerciseRows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.Distance, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
 			if err != nil {
 				exerciseRows.Close()
 				return nil, err
@@ -102,7 +102,7 @@ func (db *DB) GetLastWorkout() (*WorkoutWithExercises, error) {
 		workout.UpdatedAt = workout.WorkoutDate
 	}
 
-	exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
+	exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
 	rows, err := db.conn.Query(exercisesQuery, workout.ID)
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (db *DB) GetLastWorkout() (*WorkoutWithExercises, error) {
 	var exercises []Exercise
 	for rows.Next() {
 		var exercise Exercise
-		err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
+		err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.Distance, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -133,8 +133,8 @@ func (db *DB) SaveExercisesForWorkout(workoutID int64, exercises []Exercise) err
 	defer tx.Rollback()
 
 	query := `
-	INSERT INTO exercises (name, weight, repetitions, sets, duration, workout_id, created_at, updated_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	INSERT INTO exercises (name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	now := time.Now()
 	for _, exercise := range exercises {
@@ -148,7 +148,7 @@ func (db *DB) SaveExercisesForWorkout(workoutID int64, exercises []Exercise) err
 			updatedAt = now
 		}
 
-		_, err := tx.Exec(query, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, workoutID, createdAt, updatedAt)
+		_, err := tx.Exec(query, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, workoutID, createdAt, updatedAt)
 		if err != nil {
 			return err
 		}
@@ -212,9 +212,9 @@ func (db *DB) SaveGeneratedWorkout(workout *WorkoutWithExercises) error {
 	}
 
 	// Insert exercises
-	exerciseQuery := `INSERT INTO exercises (name, weight, repetitions, sets, duration, workout_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	exerciseQuery := `INSERT INTO exercises (name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	for _, exercise := range workout.Exercises {
-		_, err := tx.Exec(exerciseQuery, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, workoutID, now, now)
+		_, err := tx.Exec(exerciseQuery, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, workoutID, now, now)
 		if err != nil {
 			return err
 		}
@@ -280,7 +280,7 @@ func (db *DB) GetWorkoutByDate(date time.Time) (*WorkoutWithExercises, error) {
 		workout.UpdatedAt = workout.WorkoutDate
 	}
 
-	exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
+	exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
 	rows, err := db.conn.Query(exercisesQuery, workout.ID)
 	if err != nil {
 		return nil, err
@@ -290,7 +290,7 @@ func (db *DB) GetWorkoutByDate(date time.Time) (*WorkoutWithExercises, error) {
 	var exercises []Exercise
 	for rows.Next() {
 		var exercise Exercise
-		err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
+		err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.Distance, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -356,9 +356,9 @@ func (db *DB) UpdateWorkout(workoutID int, workoutType string, exercises []Exerc
 	}
 
 	// Insert new exercises
-	query := `INSERT INTO exercises (name, weight, repetitions, sets, duration, workout_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO exercises (name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	for _, exercise := range exercises {
-		_, err := tx.Exec(query, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, workoutID, now, now)
+		_, err := tx.Exec(query, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, workoutID, now, now)
 		if err != nil {
 			return err
 		}

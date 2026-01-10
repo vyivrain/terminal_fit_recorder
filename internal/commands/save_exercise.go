@@ -58,39 +58,55 @@ func (cmd *SaveExerciseCommand) Execute(database *db.DB, ollamaClient api.Ollama
 			return nil
 		}
 
-		weight, cancelled := cmd.InputProvider.GetInputWithType("Weight: ", nil, ui.InputTypeText)
-		if cancelled {
-			fmt.Println("\nWorkout cancelled")
-			return nil
+		// Validate exercise name is not empty
+		name = strings.TrimSpace(name)
+		if name == "" {
+			fmt.Println("Exercise name cannot be empty. Please try again.")
+			continue
 		}
 
-		reps, cancelled := cmd.InputProvider.GetInputWithType("Repetitions: ", nil, ui.InputTypeText)
-		if cancelled {
-			fmt.Println("\nWorkout cancelled")
-			return nil
+		// Check if distance is required for this exercise
+		requiresDistance := false
+		nameLower := strings.ToLower(name)
+		for _, keyword := range db.DistanceRequiredKeywords {
+			if strings.HasPrefix(nameLower, keyword) {
+				requiresDistance = true
+				break
+			}
 		}
-
-		sets, cancelled := cmd.InputProvider.GetInputWithType("Number of sets: ", nil, ui.InputTypeText)
-		if cancelled {
-			fmt.Println("\nWorkout cancelled")
-			return nil
-		}
-
-		// Convert weight, reps, and sets strings to int
-		weightInt := utils.ParseWeight(weight)
-		repsInt := utils.ParseInt(reps)
-		setsInt := utils.ParseInt(sets)
 
 		exercise := db.Exercise{
-			Name:        name,
-			Weight:      weightInt,
-			Repetitions: repsInt,
-			Sets:        setsInt,
+			Name: name,
+		}
+
+		// If distance is required, skip weight/reps/sets
+		if !requiresDistance {
+			weight, cancelled := cmd.InputProvider.GetInputWithType("Weight: ", nil, ui.InputTypeText)
+			if cancelled {
+				fmt.Println("\nWorkout cancelled")
+				return nil
+			}
+
+			reps, cancelled := cmd.InputProvider.GetInputWithType("Repetitions: ", nil, ui.InputTypeText)
+			if cancelled {
+				fmt.Println("\nWorkout cancelled")
+				return nil
+			}
+
+			sets, cancelled := cmd.InputProvider.GetInputWithType("Number of sets: ", nil, ui.InputTypeText)
+			if cancelled {
+				fmt.Println("\nWorkout cancelled")
+				return nil
+			}
+
+			// Convert weight, reps, and sets strings to int
+			exercise.Weight = utils.ParseWeight(weight)
+			exercise.Repetitions = utils.ParseInt(reps)
+			exercise.Sets = utils.ParseInt(sets)
 		}
 
 		// Check if duration is required for this exercise
 		requiresDuration := false
-		nameLower := strings.ToLower(name)
 		for _, keyword := range db.DurationRequiredKeywords {
 			if strings.Contains(nameLower, keyword) {
 				requiresDuration = true
@@ -114,14 +130,31 @@ func (cmd *SaveExerciseCommand) Execute(database *db.DB, ollamaClient api.Ollama
 			exercise.Duration = duration
 		}
 
+		if requiresDistance {
+			distanceStr, cancelled := cmd.InputProvider.GetInputWithType("Distance (meters): ", nil, ui.InputTypeText)
+			if cancelled {
+				fmt.Println("\nWorkout cancelled")
+				return nil
+			}
+
+			// Parse distance string to int
+			distance := utils.ParseInt(distanceStr)
+			exercise.Distance = distance
+		}
+
 		exercises = append(exercises, exercise)
 
-		if exercise.Duration > 0 {
-			fmt.Printf("\nRecorded: %s - %d kg weight, %d reps, %d sets, %.2f minutes\n",
-				exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration)
+		// Display recorded exercise based on what fields are set
+		if requiresDistance {
+			fmt.Printf("\nRecorded: %s - %d meters\n", exercise.Name, exercise.Distance)
 		} else {
-			fmt.Printf("\nRecorded: %s - %d kg weight, %d reps, %d sets\n",
-				exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets)
+			if exercise.Duration > 0 {
+				fmt.Printf("\nRecorded: %s - %d kg weight, %d reps, %d sets, %.2f minutes\n",
+					exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration)
+			} else {
+				fmt.Printf("\nRecorded: %s - %d kg weight, %d reps, %d sets\n",
+					exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets)
+			}
 		}
 
 		for {
