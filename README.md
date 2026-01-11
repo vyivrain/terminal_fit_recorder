@@ -21,23 +21,6 @@ Available platforms:
 - macOS (amd64, arm64)
 - Windows (amd64)
 
-### Verify Download (Recommended)
-
-All releases include SHA256 checksums for verification:
-
-```bash
-# Download your platform's archive and the checksums file
-wget https://github.com/yourusername/terminal_fit_recorder/releases/download/v1.0.0/terminal_fit_recorder-v1.0.0-darwin-arm64.tar.gz
-wget https://github.com/yourusername/terminal_fit_recorder/releases/download/v1.0.0/SHA256SUMS
-
-# Verify the checksum
-sha256sum -c SHA256SUMS --ignore-missing
-# or on macOS:
-shasum -a 256 -c SHA256SUMS --ignore-missing
-
-# You should see: terminal_fit_recorder-v1.0.0-darwin-arm64.tar.gz: OK
-```
-
 ### Install
 
 ```bash
@@ -51,21 +34,20 @@ chmod +x terminal_fit_recorder
 sudo mv terminal_fit_recorder /usr/local/bin/
 ```
 
-### macOS Security Note
+### macOS Security Warning
 
-Since the binary is not signed with an Apple Developer certificate, macOS Gatekeeper will block it initially. Remove the quarantine flag:
+If you see "Apple could not verify terminal_fit_recorder is free of malware", you can bypass this warning:
 
+**Method 1: Command line**
 ```bash
+# Remove the quarantine attribute
 xattr -d com.apple.quarantine terminal_fit_recorder
 ```
 
-Alternatively, right-click the binary and select "Open" instead of double-clicking.
-
-**Why is this safe?**
-- ✅ All binaries are built automatically via [GitHub Actions](https://github.com/yourusername/terminal_fit_recorder/actions) (transparent process)
-- ✅ Source code is open and auditable
-- ✅ SHA256 checksums provided for verification
-- ✅ Build process is reproducible and publicly visible
+**Method 2: System Settings**
+1. Go to System Settings → Privacy & Security
+2. Scroll down to find the blocked app message
+3. Click "Open Anyway"
 
 ## Quick Start
 
