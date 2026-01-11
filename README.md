@@ -11,6 +11,35 @@ A command-line tool for tracking and managing your fitness workouts with AI-powe
 - **Local database storage** - All data stored securely in `~/.terminal_fit_recorder/exercises.db`
 
 ## Installation
+
+### Download
+
+Download the latest release for your platform from the [Releases page](https://github.com/yourusername/terminal_fit_recorder/releases).
+
+Available platforms:
+- Linux (amd64, arm64)
+- macOS (amd64, arm64)
+- Windows (amd64)
+
+### Verify Download (Recommended)
+
+All releases include SHA256 checksums for verification:
+
+```bash
+# Download your platform's archive and the checksums file
+wget https://github.com/yourusername/terminal_fit_recorder/releases/download/v1.0.0/terminal_fit_recorder-v1.0.0-darwin-arm64.tar.gz
+wget https://github.com/yourusername/terminal_fit_recorder/releases/download/v1.0.0/SHA256SUMS
+
+# Verify the checksum
+sha256sum -c SHA256SUMS --ignore-missing
+# or on macOS:
+shasum -a 256 -c SHA256SUMS --ignore-missing
+
+# You should see: terminal_fit_recorder-v1.0.0-darwin-arm64.tar.gz: OK
+```
+
+### Install
+
 ```bash
 # Extract the archive
 tar -xzf terminal_fit_recorder-<version>-<platform>.tar.gz
@@ -21,6 +50,22 @@ chmod +x terminal_fit_recorder
 # Move to your PATH (optional)
 sudo mv terminal_fit_recorder /usr/local/bin/
 ```
+
+### macOS Security Note
+
+Since the binary is not signed with an Apple Developer certificate, macOS Gatekeeper will block it initially. Remove the quarantine flag:
+
+```bash
+xattr -d com.apple.quarantine terminal_fit_recorder
+```
+
+Alternatively, right-click the binary and select "Open" instead of double-clicking.
+
+**Why is this safe?**
+- ✅ All binaries are built automatically via [GitHub Actions](https://github.com/yourusername/terminal_fit_recorder/actions) (transparent process)
+- ✅ Source code is open and auditable
+- ✅ SHA256 checksums provided for verification
+- ✅ Build process is reproducible and publicly visible
 
 ## Quick Start
 
