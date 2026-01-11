@@ -128,3 +128,4 @@ For each exercise, you can track:
 - Repetitions
 - Sets
 - Duration (automatically prompted for cardio exercises)
+- Distance (for specific type of exercises)
