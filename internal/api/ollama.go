@@ -185,18 +185,21 @@ func (c *Client) SendPromptStream(ctx context.Context, prompt string) (string, e
 
 // AIWorkoutResponse is the structure for parsing AI JSON response
 type AIWorkoutResponse struct {
-	Date      string       `json:"date"`
-	Type      string       `json:"type"`
-	Exercises []AIExercise `json:"exercises"`
+	Date       string       `json:"date"`
+	Type       string       `json:"type"`
+	LegacyType string       `json:"workout_type"`
+	Exercises  []AIExercise `json:"exercises"`
 }
 
 // AIExercise represents an exercise in AI JSON response
 type AIExercise struct {
-	Name     string      `json:"name"`
-	Weight   interface{} `json:"weight"`   // Can be string, number, or "-"
-	Reps     interface{} `json:"reps"`     // Can be string, number, or "-"
-	Sets     interface{} `json:"sets"`     // Can be string, number, or "-"
-	Duration interface{} `json:"duration"` // Can be string, number, or "-"
+	Name        string      `json:"name"`
+	Weight      interface{} `json:"weight"`      // Can be string, number, or "-"
+	Reps        interface{} `json:"reps"`        // Can be string, number, or "-"
+	Repetitions interface{} `json:"repetitions"` // Can be string, number, or "-"
+	Sets        interface{} `json:"sets"`        // Can be string, number, or "-"
+	Duration    interface{} `json:"duration"`    // Can be string, number, or "-"
+	Distance    interface{} `json:"distance"`    // Can be string, number, or "-"
 }
 
 // ParseWorkoutResponse parses AI JSON response into db.WorkoutWithExercises
@@ -211,33 +214,93 @@ func ParseWorkoutResponse(jsonResponse string) (*db.WorkoutWithExercises, error)
 
 	jsonStr := jsonResponse[jsonStart : jsonEnd+1]
 
-	// Unmarshal AI response
 	var aiWorkout AIWorkoutResponse
 	if err := json.Unmarshal([]byte(jsonStr), &aiWorkout); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
-	// Parse date
+	workout, err := convertAIWorkout(aiWorkout)
+	if err != nil {
+		return nil, err
+	}
+
+	return workout, nil
+}
+
+// ParseWorkoutResponses parses JSON containing one workout, an array of workouts, or {"workouts":[...]}.
+func ParseWorkoutResponses(jsonResponse string) ([]*db.WorkoutWithExercises, error) {
+	jsonResponse = strings.TrimSpace(jsonResponse)
+	if jsonResponse == "" {
+		return nil, fmt.Errorf("no workout data found")
+	}
+
+	var aiWorkouts []AIWorkoutResponse
+	if err := json.Unmarshal([]byte(jsonResponse), &aiWorkouts); err == nil {
+		return convertAIWorkouts(aiWorkouts)
+	}
+
+	var wrapper struct {
+		Workouts []AIWorkoutResponse `json:"workouts"`
+	}
+	if err := json.Unmarshal([]byte(jsonResponse), &wrapper); err == nil && len(wrapper.Workouts) > 0 {
+		return convertAIWorkouts(wrapper.Workouts)
+	}
+
+	workout, err := ParseWorkoutResponse(jsonResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	return []*db.WorkoutWithExercises{workout}, nil
+}
+
+func convertAIWorkouts(aiWorkouts []AIWorkoutResponse) ([]*db.WorkoutWithExercises, error) {
+	if len(aiWorkouts) == 0 {
+		return nil, fmt.Errorf("no workouts found")
+	}
+
+	workouts := make([]*db.WorkoutWithExercises, 0, len(aiWorkouts))
+	for i, aiWorkout := range aiWorkouts {
+		workout, err := convertAIWorkout(aiWorkout)
+		if err != nil {
+			return nil, fmt.Errorf("workout %d: %w", i+1, err)
+		}
+		workouts = append(workouts, workout)
+	}
+
+	return workouts, nil
+}
+
+func convertAIWorkout(aiWorkout AIWorkoutResponse) (*db.WorkoutWithExercises, error) {
 	workoutDate, err := time.Parse("2006-01-02", aiWorkout.Date)
 	if err != nil {
 		return nil, fmt.Errorf("invalid date format: %w", err)
 	}
 
-	// Create Workout
+	workoutType := aiWorkout.Type
+	if workoutType == "" {
+		workoutType = aiWorkout.LegacyType
+	}
+
 	workout := db.Workout{
-		WorkoutType: aiWorkout.Type,
+		WorkoutType: workoutType,
 		WorkoutDate: workoutDate,
 	}
 
-	// Parse exercises
 	var exercises []db.Exercise
 	for _, aiEx := range aiWorkout.Exercises {
+		reps := aiEx.Reps
+		if reps == nil {
+			reps = aiEx.Repetitions
+		}
+
 		ex := db.Exercise{
 			Name:        aiEx.Name,
 			Weight:      convertToInt(aiEx.Weight),
-			Repetitions: convertToInt(aiEx.Reps),
+			Repetitions: convertToInt(reps),
 			Sets:        convertToInt(aiEx.Sets),
 			Duration:    convertToFloat(aiEx.Duration),
+			Distance:    convertToInt(aiEx.Distance),
 		}
 		exercises = append(exercises, ex)
 	}

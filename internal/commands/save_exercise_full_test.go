@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"terminal_fit_recorder/internal/ui"
@@ -355,5 +357,87 @@ func TestSaveExerciseCommand_Execute_DistanceExerciseWithDuration(t *testing.T) 
 	assert.Equal(t, 3, exercise.Sets)
 
 	// Verify all mocks were called
+	mockInput.AssertExpectations(t)
+}
+
+func TestSaveExerciseCommand_Execute_FileImport_UserApproves(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	filePath := filepath.Join(t.TempDir(), "workouts.json")
+	err := os.WriteFile(filePath, []byte(`[
+		{
+			"date": "2026-01-05",
+			"type": "strength",
+			"exercises": [
+				{"name": "Bench Press", "weight": 80, "reps": 10, "sets": 3, "duration": "-"}
+			]
+		},
+		{
+			"date": "2026-01-06",
+			"type": "cardio",
+			"exercises": [
+				{"name": "Run", "distance": 5000, "duration": 30}
+			]
+		}
+	]`), 0644)
+	assert.NoError(t, err)
+
+	mockInput := new(MockInputProvider)
+	mockInput.On("GetInputWithType",
+		"\nApprove imported workouts?",
+		[]string{"approve", "discard", "edit"},
+		ui.InputTypeCheckbox).Return("approve", false)
+
+	cmd := NewSaveExerciseCommand(filePath)
+	cmd.InputProvider = mockInput
+
+	err = cmd.Execute(database, new(MockOllamaClient))
+	assert.NoError(t, err)
+
+	workouts, err := database.GetAllWorkouts()
+	assert.NoError(t, err)
+	assert.Len(t, workouts, 2)
+	assert.Equal(t, "completed", workouts[0].Workout.Status)
+	assert.Equal(t, "cardio", workouts[0].Workout.WorkoutType)
+	assert.Equal(t, 5000, workouts[0].Exercises[0].Distance)
+
+	mockInput.AssertExpectations(t)
+}
+
+func TestSaveExerciseCommand_Execute_FileImport_UserDiscards(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	filePath := filepath.Join(t.TempDir(), "workouts.json")
+	err := os.WriteFile(filePath, []byte(`{
+		"workouts": [
+			{
+				"date": "2026-01-05",
+				"type": "strength",
+				"exercises": [
+					{"name": "Squat", "weight": 100, "repetitions": 8, "sets": 4}
+				]
+			}
+		]
+	}`), 0644)
+	assert.NoError(t, err)
+
+	mockInput := new(MockInputProvider)
+	mockInput.On("GetInputWithType",
+		"\nApprove imported workouts?",
+		[]string{"approve", "discard", "edit"},
+		ui.InputTypeCheckbox).Return("discard", false)
+
+	cmd := NewSaveExerciseCommand("--file", filePath)
+	cmd.InputProvider = mockInput
+
+	err = cmd.Execute(database, new(MockOllamaClient))
+	assert.NoError(t, err)
+
+	workouts, err := database.GetAllWorkouts()
+	assert.NoError(t, err)
+	assert.Empty(t, workouts)
+
 	mockInput.AssertExpectations(t)
 }

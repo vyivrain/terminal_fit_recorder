@@ -157,6 +157,69 @@ func (db *DB) SaveExercisesForWorkout(workoutID int64, exercises []Exercise) err
 	return tx.Commit()
 }
 
+func (db *DB) SaveWorkoutsWithExercises(workouts []*WorkoutWithExercises, status string) error {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	seenDates := make(map[string]bool)
+	for _, workout := range workouts {
+		if workout == nil {
+			return fmt.Errorf("workout cannot be nil")
+		}
+
+		dateKey := workout.Workout.WorkoutDate.Format("2006-01-02")
+		if seenDates[dateKey] {
+			return fmt.Errorf("file contains more than one workout for %s. Only one workout per day is allowed", dateKey)
+		}
+		seenDates[dateKey] = true
+
+		var count int
+		err := tx.QueryRow(`SELECT COUNT(*) FROM workouts WHERE DATE(workout_date) = DATE(?)`, workout.Workout.WorkoutDate).Scan(&count)
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return fmt.Errorf("a workout already exists for %s. Only one workout per day is allowed", dateKey)
+		}
+	}
+
+	now := time.Now()
+	workoutQuery := `INSERT INTO workouts (workout_type, workout_date, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
+	exerciseQuery := `INSERT INTO exercises (name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	for _, workout := range workouts {
+		workoutStatus := status
+		if workoutStatus == "" {
+			workoutStatus = workout.Workout.Status
+		}
+		if workoutStatus == "" {
+			workoutStatus = "completed"
+		}
+
+		result, err := tx.Exec(workoutQuery, workout.Workout.WorkoutType, workout.Workout.WorkoutDate, workoutStatus, now, now)
+		if err != nil {
+			return err
+		}
+
+		workoutID, err := result.LastInsertId()
+		if err != nil {
+			return err
+		}
+
+		for _, exercise := range workout.Exercises {
+			_, err := tx.Exec(exerciseQuery, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, workoutID, now, now)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (db *DB) CreateWorkout(workoutType string, status string, workoutDate ...time.Time) (int64, error) {
 	now := time.Now()
 

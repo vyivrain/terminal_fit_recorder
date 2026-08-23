@@ -11,7 +11,7 @@ type CommandFactory func(args []string) Command
 var commandMap = map[string]map[string]CommandFactory{
 	"exercise": {
 		"init":     func(args []string) Command { return NewInitCommand() },
-		"save":     func(args []string) Command { return NewSaveExerciseCommand() },
+		"save":     func(args []string) Command { return NewSaveExerciseCommand(args[3:]...) },
 		"last":     func(args []string) Command { return NewShowLastWorkoutCommand() },
 		"all":      func(args []string) Command { return NewShowAllWorkoutsCommand() },
 		"edit":     func(args []string) Command { return NewEditCommand(args) },

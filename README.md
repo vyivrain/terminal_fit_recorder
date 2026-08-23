@@ -90,6 +90,30 @@ The AI will analyze your previous workouts and suggest:
 
 Generated workouts can be saved as "planned" for future sessions.
 
+### `exercise save --file`
+Import one or more completed workouts from a JSON file. The app previews every parsed workout first, then asks whether to approve, discard, or edit the import. Approve saves the full batch; discard saves nothing. Edit is reserved for a future interactive editor.
+
+```bash
+terminal_fit_recorder exercise save --file workouts.json
+terminal_fit_recorder exercise save workouts.json
+```
+
+Supported JSON shapes:
+
+```json
+[
+  {
+    "date": "2026-01-05",
+    "type": "strength",
+    "exercises": [
+      { "name": "Bench Press", "weight": 80, "reps": 10, "sets": 3 }
+    ]
+  }
+]
+```
+
+The file can also use `{ "workouts": [...] }` or contain a single workout object.
+
 ### `exercise help`
 Display help information with all available commands.
 

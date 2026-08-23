@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"terminal_fit_recorder/internal/api"
@@ -12,12 +13,23 @@ import (
 
 type SaveExerciseCommand struct {
 	InputProvider ui.InputProvider
+	FilePath      string
+	Args          []string
 }
 
-func NewSaveExerciseCommand() *SaveExerciseCommand {
-	return &SaveExerciseCommand{
+func NewSaveExerciseCommand(args ...string) *SaveExerciseCommand {
+	cmd := &SaveExerciseCommand{
 		InputProvider: ui.NewDefaultInputProvider(),
+		Args:          args,
 	}
+
+	if len(args) == 1 && args[0] != "--file" && args[0] != "-f" {
+		cmd.FilePath = args[0]
+	} else if len(args) == 2 && (args[0] == "--file" || args[0] == "-f") {
+		cmd.FilePath = args[1]
+	}
+
+	return cmd
 }
 
 func (cmd *SaveExerciseCommand) Name() string {
@@ -25,14 +37,34 @@ func (cmd *SaveExerciseCommand) Name() string {
 }
 
 func (cmd *SaveExerciseCommand) Validate() error {
+	if len(cmd.Args) > 0 && cmd.FilePath == "" {
+		return fmt.Errorf("usage: terminal_fit_recorder exercise save [--file path]")
+	}
+
+	if cmd.FilePath == "" {
+		return nil
+	}
+
+	info, err := os.Stat(cmd.FilePath)
+	if err != nil {
+		return fmt.Errorf("cannot read workout file %q: %v", cmd.FilePath, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("workout file %q is a directory", cmd.FilePath)
+	}
+
 	return nil
 }
 
 func (cmd *SaveExerciseCommand) HelpManual() string {
-	return "terminal_fit_recorder exercise save\n    Start an interactive session to save a new workout with exercises."
+	return "terminal_fit_recorder exercise save [--file path]\n    Start an interactive session to save a new workout, or import one/many workouts from a JSON file."
 }
 
 func (cmd *SaveExerciseCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
+	if cmd.FilePath != "" {
+		return cmd.executeFromFile(database)
+	}
+
 	// Get workout type using checkbox
 	workoutType, cancelled := cmd.InputProvider.GetInputWithType("Workout type:", []string{"strength", "cardio"}, ui.InputTypeCheckbox)
 	if cancelled {
@@ -190,6 +222,56 @@ func (cmd *SaveExerciseCommand) Execute(database *db.DB, ollamaClient api.Ollama
 			} else {
 				fmt.Println("Please answer 'yes', 'no', or 'review'")
 			}
+		}
+	}
+}
+
+func (cmd *SaveExerciseCommand) executeFromFile(database *db.DB) error {
+	content, err := os.ReadFile(cmd.FilePath)
+	if err != nil {
+		return fmt.Errorf("error reading workout file: %v", err)
+	}
+
+	workouts, err := api.ParseWorkoutResponses(string(content))
+	if err != nil {
+		return fmt.Errorf("error parsing workout file: %v", err)
+	}
+
+	for _, workout := range workouts {
+		workout.Workout.Status = "completed"
+	}
+
+	fmt.Printf("\nProcessed %d workout(s) from %s\n", len(workouts), cmd.FilePath)
+	for i, workout := range workouts {
+		fmt.Printf("\n========== Workout %d of %d ==========\n", i+1, len(workouts))
+		fmt.Println(FormatWorkout(workout))
+	}
+
+	for {
+		choice, cancelled := cmd.InputProvider.GetInputWithType(
+			"\nApprove imported workouts?",
+			[]string{"approve", "discard", "edit"},
+			ui.InputTypeCheckbox,
+		)
+		if cancelled {
+			fmt.Println("\nImport discarded")
+			return nil
+		}
+
+		switch strings.ToLower(strings.TrimSpace(choice)) {
+		case "approve", "yes", "y":
+			if err := database.SaveWorkoutsWithExercises(workouts, "completed"); err != nil {
+				return fmt.Errorf("error saving imported workouts: %v", err)
+			}
+			fmt.Printf("Saved %d workout(s)\n", len(workouts))
+			return nil
+		case "discard", "no", "n":
+			fmt.Println("Import discarded")
+			return nil
+		case "edit", "e":
+			fmt.Println("Edit mode for file imports is not implemented yet. Returning to approval prompt.")
+		default:
+			fmt.Println("Please choose approve, discard, or edit")
 		}
 	}
 }
