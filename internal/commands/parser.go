@@ -19,11 +19,21 @@ var commandMap = map[string]map[string]CommandFactory{
 		"generate": func(args []string) Command { return NewGenerateCommandWrapper(args) },
 		"help":     func(args []string) Command { return NewHelpCommand() },
 	},
+	"profile": {
+		"create": func(args []string) Command { return NewCreateProfileCommand(args[3:]...) },
+		"use":    func(args []string) Command { return NewUseProfileCommand(args[3:]...) },
+		"list":   func(args []string) Command { return NewListProfilesCommand(args[3:]...) },
+		"help":   func(args []string) Command { return NewHelpCommand() },
+	},
+	"ai": {
+		"test": func(args []string) Command { return NewAITestCommand(args[3:]...) },
+		"help": func(args []string) Command { return NewHelpCommand() },
+	},
 }
 
 func ParseArgs(args []string) (Command, error) {
 	if len(args) < 3 {
-		return nil, fmt.Errorf("usage: terminal_fit_recorder <command> <subcommand>")
+		return nil, fmt.Errorf("usage: terminal_fit_recorder <exercise|profile|ai> <command>")
 	}
 
 	action := args[1]

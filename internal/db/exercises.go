@@ -22,9 +22,19 @@ var DurationRequiredKeywords = []string{"plank", "wall sit", "hold", "stretch"}
 var DistanceRequiredKeywords = []string{"run", "walk", "cycling", "cycle", "swim", "rowing", "row"}
 
 func (db *DB) GetAllExercises() ([]Exercise, error) {
-	query := `SELECT id, name, weight, repetitions, sets, duration, distance, created_at FROM exercises ORDER BY created_at DESC`
+	profileID, err := activeProfileID(db.conn)
+	if err != nil {
+		return nil, err
+	}
 
-	rows, err := db.conn.Query(query)
+	query := `
+		SELECT e.id, e.name, e.weight, e.repetitions, e.sets, e.duration, e.distance, e.created_at
+		FROM exercises e
+		JOIN workouts w ON w.id = e.workout_id
+		WHERE w.profile_id = ?
+		ORDER BY e.created_at DESC`
+
+	rows, err := db.conn.Query(query, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -44,9 +54,19 @@ func (db *DB) GetAllExercises() ([]Exercise, error) {
 }
 
 func (db *DB) GetDistinctExerciseNames() ([]string, error) {
-	query := `SELECT DISTINCT name FROM exercises ORDER BY name`
+	profileID, err := activeProfileID(db.conn)
+	if err != nil {
+		return nil, err
+	}
 
-	rows, err := db.conn.Query(query)
+	query := `
+		SELECT DISTINCT e.name
+		FROM exercises e
+		JOIN workouts w ON w.id = e.workout_id
+		WHERE w.profile_id = ?
+		ORDER BY e.name`
+
+	rows, err := db.conn.Query(query, profileID)
 	if err != nil {
 		return nil, err
 	}

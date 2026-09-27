@@ -21,9 +21,14 @@ type WorkoutWithExercises struct {
 }
 
 func (db *DB) GetAllWorkouts() ([]WorkoutWithExercises, error) {
-	workoutsQuery := `SELECT id, workout_type, workout_date, status, created_at, updated_at FROM workouts ORDER BY workout_date DESC`
+	profileID, err := activeProfileID(db.conn)
+	if err != nil {
+		return nil, err
+	}
 
-	rows, err := db.conn.Query(workoutsQuery)
+	workoutsQuery := `SELECT id, workout_type, workout_date, status, created_at, updated_at FROM workouts WHERE profile_id = ? ORDER BY workout_date DESC`
+
+	rows, err := db.conn.Query(workoutsQuery, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -78,11 +83,16 @@ func (db *DB) GetAllWorkouts() ([]WorkoutWithExercises, error) {
 }
 
 func (db *DB) GetLastWorkout() (*WorkoutWithExercises, error) {
-	workoutQuery := `SELECT id, workout_type, workout_date, status, created_at, updated_at FROM workouts ORDER BY workout_date DESC LIMIT 1`
+	profileID, err := activeProfileID(db.conn)
+	if err != nil {
+		return nil, err
+	}
+
+	workoutQuery := `SELECT id, workout_type, workout_date, status, created_at, updated_at FROM workouts WHERE profile_id = ? ORDER BY workout_date DESC LIMIT 1`
 
 	var workout Workout
 	var createdAt, updatedAt sql.NullTime
-	err := db.conn.QueryRow(workoutQuery).Scan(&workout.ID, &workout.WorkoutType, &workout.WorkoutDate, &workout.Status, &createdAt, &updatedAt)
+	err = db.conn.QueryRow(workoutQuery, profileID).Scan(&workout.ID, &workout.WorkoutType, &workout.WorkoutDate, &workout.Status, &createdAt, &updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -132,6 +142,19 @@ func (db *DB) SaveExercisesForWorkout(workoutID int64, exercises []Exercise) err
 	}
 	defer tx.Rollback()
 
+	profileID, err := activeProfileID(tx)
+	if err != nil {
+		return err
+	}
+
+	var workoutExists bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM workouts WHERE id = ? AND profile_id = ?)`, workoutID, profileID).Scan(&workoutExists); err != nil {
+		return err
+	}
+	if !workoutExists {
+		return fmt.Errorf("workout does not belong to the active profile")
+	}
+
 	query := `
 	INSERT INTO exercises (name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -164,6 +187,11 @@ func (db *DB) SaveWorkoutsWithExercises(workouts []*WorkoutWithExercises, status
 	}
 	defer tx.Rollback()
 
+	profileID, err := activeProfileID(tx)
+	if err != nil {
+		return err
+	}
+
 	seenDates := make(map[string]bool)
 	for _, workout := range workouts {
 		if workout == nil {
@@ -177,7 +205,7 @@ func (db *DB) SaveWorkoutsWithExercises(workouts []*WorkoutWithExercises, status
 		seenDates[dateKey] = true
 
 		var count int
-		err := tx.QueryRow(`SELECT COUNT(*) FROM workouts WHERE DATE(workout_date) = DATE(?)`, workout.Workout.WorkoutDate).Scan(&count)
+		err := tx.QueryRow(`SELECT COUNT(*) FROM workouts WHERE profile_id = ? AND DATE(workout_date) = DATE(?)`, profileID, workout.Workout.WorkoutDate).Scan(&count)
 		if err != nil {
 			return err
 		}
@@ -187,7 +215,7 @@ func (db *DB) SaveWorkoutsWithExercises(workouts []*WorkoutWithExercises, status
 	}
 
 	now := time.Now()
-	workoutQuery := `INSERT INTO workouts (workout_type, workout_date, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
+	workoutQuery := `INSERT INTO workouts (workout_type, workout_date, status, profile_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
 	exerciseQuery := `INSERT INTO exercises (name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	for _, workout := range workouts {
@@ -199,7 +227,7 @@ func (db *DB) SaveWorkoutsWithExercises(workouts []*WorkoutWithExercises, status
 			workoutStatus = "completed"
 		}
 
-		result, err := tx.Exec(workoutQuery, workout.Workout.WorkoutType, workout.Workout.WorkoutDate, workoutStatus, now, now)
+		result, err := tx.Exec(workoutQuery, workout.Workout.WorkoutType, workout.Workout.WorkoutDate, workoutStatus, profileID, now, now)
 		if err != nil {
 			return err
 		}
@@ -222,6 +250,10 @@ func (db *DB) SaveWorkoutsWithExercises(workouts []*WorkoutWithExercises, status
 
 func (db *DB) CreateWorkout(workoutType string, status string, workoutDate ...time.Time) (int64, error) {
 	now := time.Now()
+	profileID, err := activeProfileID(db.conn)
+	if err != nil {
+		return 0, err
+	}
 
 	// Use provided date or default to now
 	var date time.Time
@@ -233,7 +265,7 @@ func (db *DB) CreateWorkout(workoutType string, status string, workoutDate ...ti
 
 	// Check if a workout already exists for the specified date
 	var count int
-	err := db.conn.QueryRow(`SELECT COUNT(*) FROM workouts WHERE DATE(workout_date) = DATE(?)`, date).Scan(&count)
+	err = db.conn.QueryRow(`SELECT COUNT(*) FROM workouts WHERE profile_id = ? AND DATE(workout_date) = DATE(?)`, profileID, date).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -243,10 +275,10 @@ func (db *DB) CreateWorkout(workoutType string, status string, workoutDate ...ti
 	}
 
 	query := `
-	INSERT INTO workouts (workout_type, workout_date, status, created_at, updated_at)
-	VALUES (?, ?, ?, ?, ?)`
+	INSERT INTO workouts (workout_type, workout_date, status, profile_id, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?)`
 
-	result, err := db.conn.Exec(query, workoutType, date, status, now, now)
+	result, err := db.conn.Exec(query, workoutType, date, status, profileID, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -255,35 +287,7 @@ func (db *DB) CreateWorkout(workoutType string, status string, workoutDate ...ti
 }
 
 func (db *DB) SaveGeneratedWorkout(workout *WorkoutWithExercises) error {
-	tx, err := db.conn.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	// Insert workout with planned status
-	query := `INSERT INTO workouts (workout_type, workout_date, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
-	now := time.Now()
-	result, err := tx.Exec(query, workout.Workout.WorkoutType, workout.Workout.WorkoutDate, "planned", now, now)
-	if err != nil {
-		return err
-	}
-
-	workoutID, err := result.LastInsertId()
-	if err != nil {
-		return err
-	}
-
-	// Insert exercises
-	exerciseQuery := `INSERT INTO exercises (name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	for _, exercise := range workout.Exercises {
-		_, err := tx.Exec(exerciseQuery, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, workoutID, now, now)
-		if err != nil {
-			return err
-		}
-	}
-
-	return tx.Commit()
+	return db.SaveWorkoutsWithExercises([]*WorkoutWithExercises{workout}, "planned")
 }
 
 func (db *DB) DeleteLastWorkout() error {
@@ -293,9 +297,14 @@ func (db *DB) DeleteLastWorkout() error {
 	}
 	defer tx.Rollback()
 
+	profileID, err := activeProfileID(tx)
+	if err != nil {
+		return err
+	}
+
 	// Get the last workout ID
 	var workoutID int
-	err = tx.QueryRow(`SELECT id FROM workouts ORDER BY workout_date DESC LIMIT 1`).Scan(&workoutID)
+	err = tx.QueryRow(`SELECT id FROM workouts WHERE profile_id = ? ORDER BY workout_date DESC LIMIT 1`, profileID).Scan(&workoutID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil // No workouts to delete
@@ -319,11 +328,16 @@ func (db *DB) DeleteLastWorkout() error {
 }
 
 func (db *DB) GetWorkoutByDate(date time.Time) (*WorkoutWithExercises, error) {
-	workoutQuery := `SELECT id, workout_type, workout_date, status, created_at, updated_at FROM workouts WHERE DATE(workout_date) = DATE(?) LIMIT 1`
+	profileID, err := activeProfileID(db.conn)
+	if err != nil {
+		return nil, err
+	}
+
+	workoutQuery := `SELECT id, workout_type, workout_date, status, created_at, updated_at FROM workouts WHERE profile_id = ? AND DATE(workout_date) = DATE(?) LIMIT 1`
 
 	var workout Workout
 	var createdAt, updatedAt sql.NullTime
-	err := db.conn.QueryRow(workoutQuery, date).Scan(&workout.ID, &workout.WorkoutType, &workout.WorkoutDate, &workout.Status, &createdAt, &updatedAt)
+	err = db.conn.QueryRow(workoutQuery, profileID, date).Scan(&workout.ID, &workout.WorkoutType, &workout.WorkoutDate, &workout.Status, &createdAt, &updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -373,9 +387,14 @@ func (db *DB) DeleteWorkoutByDate(date time.Time) error {
 	}
 	defer tx.Rollback()
 
+	profileID, err := activeProfileID(tx)
+	if err != nil {
+		return err
+	}
+
 	// Get workout ID for the specified date
 	var workoutID int
-	err = tx.QueryRow(`SELECT id FROM workouts WHERE DATE(workout_date) = DATE(?) LIMIT 1`, date).Scan(&workoutID)
+	err = tx.QueryRow(`SELECT id FROM workouts WHERE profile_id = ? AND DATE(workout_date) = DATE(?) LIMIT 1`, profileID, date).Scan(&workoutID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil // No workout found for this date
@@ -405,11 +424,23 @@ func (db *DB) UpdateWorkout(workoutID int, workoutType string, exercises []Exerc
 	}
 	defer tx.Rollback()
 
-	// Update workout type and updated_at
-	now := time.Now()
-	_, err = tx.Exec(`UPDATE workouts SET workout_type = ?, updated_at = ? WHERE id = ?`, workoutType, now, workoutID)
+	profileID, err := activeProfileID(tx)
 	if err != nil {
 		return err
+	}
+
+	// Update workout type and updated_at
+	now := time.Now()
+	result, err := tx.Exec(`UPDATE workouts SET workout_type = ?, updated_at = ? WHERE id = ? AND profile_id = ?`, workoutType, now, workoutID, profileID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("workout does not belong to the active profile")
 	}
 
 	// Delete existing exercises
@@ -431,9 +462,14 @@ func (db *DB) UpdateWorkout(workoutID int, workoutType string, exercises []Exerc
 }
 
 func (db *DB) UpdateWorkoutDate(oldDate time.Time, newDate time.Time) error {
+	profileID, err := activeProfileID(db.conn)
+	if err != nil {
+		return err
+	}
+
 	// Check if a workout already exists on the new date
 	var count int
-	err := db.conn.QueryRow(`SELECT COUNT(*) FROM workouts WHERE DATE(workout_date) = DATE(?)`, newDate).Scan(&count)
+	err = db.conn.QueryRow(`SELECT COUNT(*) FROM workouts WHERE profile_id = ? AND DATE(workout_date) = DATE(?)`, profileID, newDate).Scan(&count)
 	if err != nil {
 		return err
 	}
@@ -443,7 +479,7 @@ func (db *DB) UpdateWorkoutDate(oldDate time.Time, newDate time.Time) error {
 	}
 
 	// Update the workout date
-	result, err := db.conn.Exec(`UPDATE workouts SET workout_date = ?, updated_at = ? WHERE DATE(workout_date) = DATE(?)`, newDate, time.Now(), oldDate)
+	result, err := db.conn.Exec(`UPDATE workouts SET workout_date = ?, updated_at = ? WHERE profile_id = ? AND DATE(workout_date) = DATE(?)`, newDate, time.Now(), profileID, oldDate)
 	if err != nil {
 		return err
 	}
@@ -461,12 +497,22 @@ func (db *DB) UpdateWorkoutDate(oldDate time.Time, newDate time.Time) error {
 }
 
 func (db *DB) UpdateLastWorkoutStatus(status string) error {
+	profileID, err := activeProfileID(db.conn)
+	if err != nil {
+		return err
+	}
+
 	// Update the status of the most recent workout
 	result, err := db.conn.Exec(`
 		UPDATE workouts
 		SET status = ?, updated_at = ?
-		WHERE id = (SELECT id FROM workouts ORDER BY workout_date DESC LIMIT 1)
-	`, status, time.Now())
+		WHERE id = (
+			SELECT id FROM workouts
+			WHERE profile_id = ?
+			ORDER BY workout_date DESC
+			LIMIT 1
+		)
+	`, status, time.Now(), profileID)
 	if err != nil {
 		return err
 	}

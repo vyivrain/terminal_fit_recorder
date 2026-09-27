@@ -1,12 +1,14 @@
 # Terminal Fit Recorder
 
-A command-line tool for tracking and managing your fitness workouts with AI-powered workout generation using Ollama.
+A keyboard-first terminal application for tracking workouts and generating plans with your existing OpenCode, Codex, or Claude login.
 
 ## Features
 
+- **Full-screen terminal UI** - Browse, create, inspect, and delete workouts without memorizing commands
 - **Interactive workout logging** - Save strength and cardio workouts with detailed exercise information
-- **AI-powered workout generation** - Get personalized workout suggestions based on your history
+- **AI-powered workout generation** - Generate and safely refine workout suggestions using an installed AI CLI
 - **Workout management** - View, edit, and delete your workout history
+- **Separate profiles** - Keep each person's workouts and exercise suggestions isolated
 - **Smart exercise tracking** - Autocomplete for exercise names and duration tracking for cardio
 - **Local database storage** - All data stored securely in `~/.terminal_fit_recorder/exercises.db`
 
@@ -51,33 +53,59 @@ xattr -d com.apple.quarantine terminal_fit_recorder
 
 ## Quick Start
 
-1. **Initialize the database** (first time only):
+1. Make sure at least one supported AI CLI is installed and signed in: `opencode`, `codex`, or `claude`.
+
+2. Start the application:
+
 ```bash
-terminal_fit_recorder exercise init
+terminal_fit_recorder
 ```
 
-2. **Save your first workout**:
-```bash
-terminal_fit_recorder exercise save
-```
+The TUI creates or upgrades `~/.terminal_fit_recorder/exercises.db` automatically. Existing command-based workflows remain available.
 
-3. **View your workouts**:
-```bash
-terminal_fit_recorder exercise last  # View most recent workout
-terminal_fit_recorder exercise all   # View all workouts
-```
+### TUI keys
+
+- `enter` — open the selected workout
+- `n` — create a completed workout
+- `i` — import free-form workout notes with AI
+- `d` — delete the selected workout after confirmation
+- `g` — generate a workout with the selected AI model
+- `a` — toggle between upcoming workouts and all dates
+- `f` — filter workouts by planned or completed status
+- `p` — manage profiles
+- `m` — switch AI models
+- `/` — search the current list
+- `q` — quit
+
+The workout list starts in upcoming mode and sorts the nearest workout first. Date scope and status filters are independent, and the status modal also lets you clear the status filter.
+
+The AI preview uses `e` to manually edit the current workout in a prefilled exercise table, `a` to request a natural-language AI modification, `s` to save as planned, and `esc` to discard. AI modification prompts are constrained to exercise selection and exercise parameters; unrelated requests are refused.
+
+The exercise table includes name, weight (kg), repetitions, sets, duration (minutes), and distance (metres). Use `↑`/`↓` to select a row and `←`/`→` or `tab` to select a column, then `enter` to edit its value. `enter` accepts a cell; `esc` cancels that cell. `ctrl+s` applies the edits to the preview, including the cell currently being edited. Outside a cell, `esc` cancels the table edits. Nothing is written to the database until you save the preview with `s`. AI modifications use the latest manually edited preview. IDs and timestamps are managed by the database.
+
+The file importer accepts UTF-8 text without a required format, including Ukrainian notes. Each weekday section becomes a separate planned workout on the next matching future date. Exercise names are translated to English, explicit metrics are preserved, and missing weights are reused only when the active profile has a similar weighted exercise in its completed history. Bodyweight and distance exercises remain unweighted. Scroll an individual workout with `↑`/`↓`, browse imported workouts with `←`/`→`, edit the current workout with `e` or ask AI with `a`, then press `s` to save the full batch.
+
+Profile management supports create, rename, confirmed delete, and setting the default profile. Existing data belongs to `mine`; every new profile starts empty.
+
+The model picker includes:
+
+- `opencode-go/glm-5.3` through OpenCode
+- `gpt-5.6-sol` through Codex
+- the rolling `opus` alias through Claude
+
+The application reuses each CLI's existing login. OpenCode requests run through an isolated temporary workout-only agent with tools disabled; it does not modify global OpenCode configuration. If a CLI, login, model, or provider endpoint is unavailable, the TUI displays the returned error in a modal.
 
 ## Commands
 
 ### `exercise init`
-Initialize the database in `~/.terminal_fit_recorder/exercises.db`. Required before using any other commands.
+Explicitly initialize the database in `~/.terminal_fit_recorder/exercises.db` for command-only use. Launching the TUI initializes it automatically; otherwise, run this once before the other explicit commands.
 
 ```bash
 terminal_fit_recorder exercise init
 ```
 
 ### `exercise generate`
-Generate AI-powered workout suggestions based on your workout history using Ollama.
+Use the legacy command-based Ollama generator. The TUI's `g` workflow instead uses the selected OpenCode, Codex, or Claude CLI and its existing login.
 
 ```bash
 terminal_fit_recorder exercise generate <number_of_exercises>
@@ -121,9 +149,20 @@ Display help information with all available commands.
 terminal_fit_recorder exercise help
 ```
 
+### Profiles
+
+The active profile controls every workout and exercise command, including autocomplete and AI workout generation. Profile names are case-insensitively unique.
+
+```bash
+terminal_fit_recorder profile create <name>  # Create an empty profile and select it
+terminal_fit_recorder profile use <name>     # Select an existing profile
+terminal_fit_recorder profile list           # List profiles; * marks the active one
+terminal_fit_recorder profile help           # Display all commands
+```
+
 ## Configuration
 
-The tool uses environment variables for Ollama configuration:
+The legacy `exercise generate` command uses these environment variables for Ollama configuration. They do not affect TUI generation:
 
 ```bash
 export TERMINAL_FIT_RECORDER_OLLAMA_HOST="http://192.168.1.39:11434"
@@ -133,7 +172,7 @@ export TERMINAL_FIT_RECORDER_OLLAMA_MODEL="qwen3-coder:480b-cloud"
 export TERMINAL_FIT_RECORDER_OLLAMA_PROMPT="Your custom prompt here"
 ```
 
-These're default ollama host and ollama model. The prompt default is also made, but you can customize it.
+The application provides defaults for the Ollama host, model, and prompt; set these only when you want to override them.
 
 ## Database Location
 

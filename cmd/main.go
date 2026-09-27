@@ -8,19 +8,15 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"terminal_fit_recorder/internal/ai"
 	"terminal_fit_recorder/internal/api"
 	"terminal_fit_recorder/internal/commands"
 	"terminal_fit_recorder/internal/config"
 	"terminal_fit_recorder/internal/db"
+	"terminal_fit_recorder/internal/tui"
 )
 
 func main() {
-	// Load configuration from environment variables
-	cfg := config.Load()
-
-	// Initialize Ollama client
-	ollamaClient := api.NewClient(cfg.OllamaHost, cfg.OllamaModel, cfg.OllamaPrompt)
-
 	// Get user home directory
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -39,6 +35,22 @@ func main() {
 
 	// Database path
 	dbPath := filepath.Join(configDir, "exercises.db")
+	if len(os.Args) == 1 {
+		database, err := db.New(dbPath)
+		if err != nil {
+			log.Fatal("Failed to initialize database:", err)
+		}
+		defer database.Close()
+
+		if err := tui.Run(database, ai.NewCLIGenerator()); err != nil {
+			log.Fatal("TUI failed:", err)
+		}
+		return
+	}
+
+	// Explicit commands remain available for scripts and existing workflows.
+	cfg := config.Load()
+	ollamaClient := api.NewClient(cfg.OllamaHost, cfg.OllamaModel, cfg.OllamaPrompt)
 
 	// Parse command first to check if it's init
 	cmd, err := commands.ParseArgs(os.Args)

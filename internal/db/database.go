@@ -6,8 +6,10 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/mattn/go-sqlite3"
+
+	migrationfiles "terminal_fit_recorder/migrations"
 )
 
 type DB struct {
@@ -43,13 +45,19 @@ func (db *DB) init() error {
 }
 
 func (db *DB) runMigrations() error {
+	source, err := iofs.New(migrationfiles.Files, ".")
+	if err != nil {
+		return fmt.Errorf("could not load embedded migrations: %v", err)
+	}
+
 	driver, err := sqlite3.WithInstance(db.conn, &sqlite3.Config{})
 	if err != nil {
 		return fmt.Errorf("could not create sqlite3 driver: %v", err)
 	}
 
-	m, err := migrate.NewWithDatabaseInstance(
-		"file://migrations",
+	m, err := migrate.NewWithInstance(
+		"iofs",
+		source,
 		"sqlite3",
 		driver,
 	)
