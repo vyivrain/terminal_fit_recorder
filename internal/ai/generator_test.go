@@ -119,6 +119,71 @@ func TestClassifyRunErrorNamesTheRealCause(t *testing.T) {
 	require.ErrorContains(t, external, "boom")
 }
 
+func TestGenerationPromptIncludesCoachingPolicy(t *testing.T) {
+	prompt := generationPrompt(nil, "2026-09-06", "")
+	for _, phrase := range []string{
+		"2 strength and 1 cardio",
+		"upper/lower split",
+		"cover all major muscle groups",
+		"plateaued",
+		"do not progress",                              // returning after missed sessions
+		"ignore planned/future entries",                // completed-only gap detection
+		"not by blindly continuing the prior rotation", // week-long gap restarts split coverage
+		"leave message empty",
+	} {
+		require.Containsf(t, prompt, phrase, "generation prompt lost coaching policy: %q", phrase)
+	}
+}
+
+func TestGenerateAttachesCoachingNoteFromMessage(t *testing.T) {
+	now := func() time.Time { return time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC) }
+	model := db.AIModel{Provider: db.ModelProviderCodex, ModelID: "gpt-5-codex", DisplayName: "Codex"}
+
+	withNote := &CLIGenerator{now: now, executor: &fakeExecutor{
+		output: `{"accepted":true,"message":"Squat stalled at 100 kg×5 for 3 sessions — bumped to 102.5 kg.","workout":{"date":"2026-09-06","type":"strength","exercises":[{"name":"Squat","weight":102,"reps":5,"sets":5,"duration":0,"distance":0}]},"profileUpdate":""}`,
+	}}
+	result, err := withNote.Generate(context.Background(), model, nil, "")
+	require.NoError(t, err)
+	require.Equal(t, "Squat stalled at 100 kg×5 for 3 sessions — bumped to 102.5 kg.", result.Workout.Workout.Notes)
+	require.Empty(t, result.ProfileUpdate)
+
+	// A plain routine continuation leaves the note empty so the preview stays clean.
+	withoutNote := &CLIGenerator{now: now, executor: &fakeExecutor{
+		output: `{"accepted":true,"message":"","workout":{"date":"2026-09-06","type":"strength","exercises":[{"name":"Squat","weight":100,"reps":5,"sets":5,"duration":0,"distance":0}]}}`,
+	}}
+	plain, err := withoutNote.Generate(context.Background(), model, nil, "")
+	require.NoError(t, err)
+	require.Empty(t, plain.Workout.Workout.Notes)
+}
+
+func TestGenerateSurfacesSuggestedProfileUpdate(t *testing.T) {
+	now := func() time.Time { return time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC) }
+	model := db.AIModel{Provider: db.ModelProviderCodex, ModelID: "gpt-5-codex", DisplayName: "Codex"}
+
+	generator := &CLIGenerator{now: now, executor: &fakeExecutor{
+		output: `{"accepted":true,"message":"","workout":{"date":"2026-09-06","type":"strength","exercises":[{"name":"Squat","weight":100,"reps":5,"sets":5,"duration":0,"distance":0}]},"profileUpdate":"Bad left knee as of Sept 2026 — avoid deep squats and lunges."}`,
+	}}
+	result, err := generator.Generate(context.Background(), model, nil, "")
+	require.NoError(t, err)
+	require.Equal(t, "Bad left knee as of Sept 2026 — avoid deep squats and lunges.", result.ProfileUpdate)
+}
+
+func TestGenerationPromptIncludesProfileDescription(t *testing.T) {
+	prompt := generationPrompt(nil, "2026-09-06", "Bad left knee — avoid deep squats and lunges.")
+	require.Contains(t, prompt, "PROFILE")
+	require.Contains(t, prompt, "Bad left knee — avoid deep squats and lunges.")
+	require.Contains(t, prompt, "substitute away from anything it rules out")
+
+	withoutProfile := generationPrompt(nil, "2026-09-06", "")
+	require.NotContains(t, withoutProfile, "END_PROFILE")
+}
+
+func TestRefinementPromptIncludesProfileDescription(t *testing.T) {
+	prompt := refinementPrompt(sampleWorkout(), "Swap the accessory lift", "Shoulder impingement — avoid overhead pressing.")
+	require.Contains(t, prompt, "PROFILE")
+	require.Contains(t, prompt, "Shoulder impingement — avoid overhead pressing.")
+}
+
 func TestOpenCodeRequestUsesTemporaryNoToolsAgent(t *testing.T) {
 	executor := &fakeExecutor{
 		t:      t,
@@ -132,7 +197,7 @@ func TestOpenCodeRequestUsesTemporaryNoToolsAgent(t *testing.T) {
 		Provider:    db.ModelProviderOpenCode,
 		ModelID:     "opencode-go/glm-5.3",
 		DisplayName: "GLM 5.3 · OpenCode",
-	}, nil)
+	}, nil, "")
 	require.NoError(t, err)
 	require.Contains(t, executor.agent, "mode: primary")
 	require.Contains(t, executor.agent, "steps: 2")
@@ -204,14 +269,14 @@ func TestGenerateParsesSchemaValidatedWorkout(t *testing.T) {
 		return time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
 	}}
 
-	workout, err := generator.Generate(context.Background(), db.AIModel{
+	result, err := generator.Generate(context.Background(), db.AIModel{
 		Provider:    db.ModelProviderCodex,
 		ModelID:     "gpt-5.6-sol",
 		DisplayName: "GPT-5.6 Sol · Codex",
-	}, nil)
+	}, nil, "")
 	require.NoError(t, err)
-	require.Equal(t, "Squat", workout.Exercises[0].Name)
-	require.Equal(t, "planned", workout.Workout.Status)
+	require.Equal(t, "Squat", result.Workout.Exercises[0].Name)
+	require.Equal(t, "planned", result.Workout.Workout.Status)
 	require.Equal(t, "codex", executor.spec.Name)
 	require.Contains(t, executor.spec.Stdin, "If history is empty")
 }
@@ -255,7 +320,7 @@ func TestRefinementRejectsUnrelatedRequests(t *testing.T) {
 		Provider:    db.ModelProviderOpenCode,
 		ModelID:     "opencode-go/glm-5.3",
 		DisplayName: "GLM 5.3 · OpenCode",
-	}, current, "Give me a cheesecake recipe")
+	}, current, "Give me a cheesecake recipe", "")
 	require.Error(t, err)
 	require.True(t, IsRejected(err))
 	require.Contains(t, err.Error(), "Recipes")
@@ -270,7 +335,7 @@ func TestRefinementCannotChangeWorkoutIdentity(t *testing.T) {
 		Provider:    db.ModelProviderClaude,
 		ModelID:     "opus",
 		DisplayName: "Claude Opus · Latest",
-	}, sampleWorkout(), "Make it easier")
+	}, sampleWorkout(), "Make it easier", "")
 	require.ErrorContains(t, err, "changed workout type")
 }
 
@@ -282,7 +347,7 @@ func TestExecutorErrorsAreReturned(t *testing.T) {
 		Provider:    db.ModelProviderOpenCode,
 		ModelID:     "opencode-go/glm-5.3",
 		DisplayName: "GLM 5.3 · OpenCode",
-	}, nil)
+	}, nil, "")
 	require.ErrorContains(t, err, "endpoint unavailable")
 }
 

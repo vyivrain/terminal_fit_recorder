@@ -10,11 +10,14 @@ import (
 const DefaultProfileName = "mine"
 
 type Profile struct {
-	ID        int
-	Name      string
-	IsActive  bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID       int
+	Name     string
+	IsActive bool
+	// Description is free-form context about the person — habits, injuries,
+	// preferences — that the AI coach should consider when generating workouts.
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type queryRower interface {
@@ -36,10 +39,10 @@ func activeProfileID(queryer queryRower) (int, error) {
 func (db *DB) GetActiveProfile() (*Profile, error) {
 	var profile Profile
 	err := db.conn.QueryRow(`
-		SELECT id, name, is_active, created_at, updated_at
+		SELECT id, name, is_active, description, created_at, updated_at
 		FROM profiles
 		WHERE is_active = 1
-	`).Scan(&profile.ID, &profile.Name, &profile.IsActive, &profile.CreatedAt, &profile.UpdatedAt)
+	`).Scan(&profile.ID, &profile.Name, &profile.IsActive, &profile.Description, &profile.CreatedAt, &profile.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -51,7 +54,7 @@ func (db *DB) GetActiveProfile() (*Profile, error) {
 
 func (db *DB) GetProfiles() ([]Profile, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, name, is_active, created_at, updated_at
+		SELECT id, name, is_active, description, created_at, updated_at
 		FROM profiles
 		ORDER BY is_active DESC, name COLLATE NOCASE
 	`)
@@ -63,7 +66,7 @@ func (db *DB) GetProfiles() ([]Profile, error) {
 	var profiles []Profile
 	for rows.Next() {
 		var profile Profile
-		if err := rows.Scan(&profile.ID, &profile.Name, &profile.IsActive, &profile.CreatedAt, &profile.UpdatedAt); err != nil {
+		if err := rows.Scan(&profile.ID, &profile.Name, &profile.IsActive, &profile.Description, &profile.CreatedAt, &profile.UpdatedAt); err != nil {
 			return nil, err
 		}
 		profiles = append(profiles, profile)
@@ -139,10 +142,10 @@ func (db *DB) UseProfile(name string) (*Profile, error) {
 
 	var profile Profile
 	err = tx.QueryRow(`
-		SELECT id, name, is_active, created_at, updated_at
+		SELECT id, name, is_active, description, created_at, updated_at
 		FROM profiles
 		WHERE name = ? COLLATE NOCASE
-	`, name).Scan(&profile.ID, &profile.Name, &profile.IsActive, &profile.CreatedAt, &profile.UpdatedAt)
+	`, name).Scan(&profile.ID, &profile.Name, &profile.IsActive, &profile.Description, &profile.CreatedAt, &profile.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("profile %q does not exist", name)
 	}
@@ -196,10 +199,39 @@ func (db *DB) RenameProfile(profileID int, name string) (*Profile, error) {
 
 	var profile Profile
 	err = db.conn.QueryRow(`
-		SELECT id, name, is_active, created_at, updated_at
+		SELECT id, name, is_active, description, created_at, updated_at
 		FROM profiles
 		WHERE id = ?
-	`, profileID).Scan(&profile.ID, &profile.Name, &profile.IsActive, &profile.CreatedAt, &profile.UpdatedAt)
+	`, profileID).Scan(&profile.ID, &profile.Name, &profile.IsActive, &profile.Description, &profile.CreatedAt, &profile.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+// SetProfileDescription updates the free-form context attached to a profile —
+// habits, injuries, preferences — that the AI coach considers when generating
+// workouts.
+func (db *DB) SetProfileDescription(profileID int, description string) (*Profile, error) {
+	now := time.Now()
+	result, err := db.conn.Exec(`UPDATE profiles SET description = ?, updated_at = ? WHERE id = ?`, description, now, profileID)
+	if err != nil {
+		return nil, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if rowsAffected == 0 {
+		return nil, fmt.Errorf("profile %d does not exist", profileID)
+	}
+
+	var profile Profile
+	err = db.conn.QueryRow(`
+		SELECT id, name, is_active, description, created_at, updated_at
+		FROM profiles
+		WHERE id = ?
+	`, profileID).Scan(&profile.ID, &profile.Name, &profile.IsActive, &profile.Description, &profile.CreatedAt, &profile.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -259,10 +291,10 @@ func (db *DB) DeleteProfile(profileID int) (*Profile, error) {
 
 	var active Profile
 	err = tx.QueryRow(`
-		SELECT id, name, is_active, created_at, updated_at
+		SELECT id, name, is_active, description, created_at, updated_at
 		FROM profiles
 		WHERE is_active = 1
-	`).Scan(&active.ID, &active.Name, &active.IsActive, &active.CreatedAt, &active.UpdatedAt)
+	`).Scan(&active.ID, &active.Name, &active.IsActive, &active.Description, &active.CreatedAt, &active.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}

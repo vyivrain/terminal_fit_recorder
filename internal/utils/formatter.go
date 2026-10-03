@@ -16,8 +16,8 @@ func PrintExercises(exercises []db.Exercise) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "Exercise\tWeight\tReps\tSets\tDuration\tDistance")
-	fmt.Fprintln(w, "--------\t------\t----\t----\t--------\t--------")
+	fmt.Fprintln(w, "Exercise\tWeight\tReps\tSets\tDuration\tDistance\tVideo")
+	fmt.Fprintln(w, "--------\t------\t----\t----\t--------\t--------\t-----")
 
 	for _, exercise := range exercises {
 		weight := "-"
@@ -35,8 +35,13 @@ func PrintExercises(exercises []db.Exercise) {
 			distance = fmt.Sprintf("%d m", exercise.Distance)
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n",
-			exercise.Name, weight, exercise.Repetitions, exercise.Sets, duration, distance)
+		video := "-"
+		if exercise.YoutubeURL != "" {
+			video = exercise.YoutubeURL
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\t%s\n",
+			exercise.Name, weight, exercise.Repetitions, exercise.Sets, duration, distance, video)
 	}
 
 	w.Flush()

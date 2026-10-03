@@ -41,9 +41,12 @@ func (cmd *HelpCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) 
 		NewEditCommand([]string{}),
 		NewDeleteCommand([]string{}),
 		NewGenerateCommandWrapper([]string{}),
+		NewPlanCommand(),
+		NewVideosCommand(),
 		NewCreateProfileCommand(),
 		NewUseProfileCommand(),
 		NewListProfilesCommand(),
+		NewDescribeProfileCommand(),
 		NewAITestCommand(),
 		NewHelpCommand(),
 	}

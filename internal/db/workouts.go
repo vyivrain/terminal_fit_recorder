@@ -11,8 +11,12 @@ type Workout struct {
 	WorkoutType string
 	WorkoutDate time.Time
 	Status      string // "planned" or "completed"
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// Notes is commentary on this particular workout — typically what the AI
+	// generator changed, improved, or reduced and why, filled in automatically
+	// when a generated workout is saved, or set externally (e.g. via Hermes).
+	Notes     string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type WorkoutWithExercises struct {
@@ -26,7 +30,7 @@ func (db *DB) GetAllWorkouts() ([]WorkoutWithExercises, error) {
 		return nil, err
 	}
 
-	workoutsQuery := `SELECT id, workout_type, workout_date, status, created_at, updated_at FROM workouts WHERE profile_id = ? ORDER BY workout_date DESC`
+	workoutsQuery := `SELECT id, workout_type, workout_date, status, notes, created_at, updated_at FROM workouts WHERE profile_id = ? ORDER BY workout_date DESC`
 
 	rows, err := db.conn.Query(workoutsQuery, profileID)
 	if err != nil {
@@ -38,7 +42,7 @@ func (db *DB) GetAllWorkouts() ([]WorkoutWithExercises, error) {
 	for rows.Next() {
 		var workout Workout
 		var createdAt, updatedAt sql.NullTime
-		err := rows.Scan(&workout.ID, &workout.WorkoutType, &workout.WorkoutDate, &workout.Status, &createdAt, &updatedAt)
+		err := rows.Scan(&workout.ID, &workout.WorkoutType, &workout.WorkoutDate, &workout.Status, &workout.Notes, &createdAt, &updatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -55,7 +59,7 @@ func (db *DB) GetAllWorkouts() ([]WorkoutWithExercises, error) {
 			workout.UpdatedAt = workout.WorkoutDate
 		}
 
-		exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
+		exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, distance, youtube_url, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
 		exerciseRows, err := db.conn.Query(exercisesQuery, workout.ID)
 		if err != nil {
 			return nil, err
@@ -64,7 +68,7 @@ func (db *DB) GetAllWorkouts() ([]WorkoutWithExercises, error) {
 		var exercises []Exercise
 		for exerciseRows.Next() {
 			var exercise Exercise
-			err := exerciseRows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.Distance, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
+			err := exerciseRows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.Distance, &exercise.YoutubeURL, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
 			if err != nil {
 				exerciseRows.Close()
 				return nil, err
@@ -88,11 +92,11 @@ func (db *DB) GetLastWorkout() (*WorkoutWithExercises, error) {
 		return nil, err
 	}
 
-	workoutQuery := `SELECT id, workout_type, workout_date, status, created_at, updated_at FROM workouts WHERE profile_id = ? ORDER BY workout_date DESC LIMIT 1`
+	workoutQuery := `SELECT id, workout_type, workout_date, status, notes, created_at, updated_at FROM workouts WHERE profile_id = ? ORDER BY workout_date DESC LIMIT 1`
 
 	var workout Workout
 	var createdAt, updatedAt sql.NullTime
-	err = db.conn.QueryRow(workoutQuery, profileID).Scan(&workout.ID, &workout.WorkoutType, &workout.WorkoutDate, &workout.Status, &createdAt, &updatedAt)
+	err = db.conn.QueryRow(workoutQuery, profileID).Scan(&workout.ID, &workout.WorkoutType, &workout.WorkoutDate, &workout.Status, &workout.Notes, &createdAt, &updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -112,7 +116,7 @@ func (db *DB) GetLastWorkout() (*WorkoutWithExercises, error) {
 		workout.UpdatedAt = workout.WorkoutDate
 	}
 
-	exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
+	exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, distance, youtube_url, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
 	rows, err := db.conn.Query(exercisesQuery, workout.ID)
 	if err != nil {
 		return nil, err
@@ -122,7 +126,7 @@ func (db *DB) GetLastWorkout() (*WorkoutWithExercises, error) {
 	var exercises []Exercise
 	for rows.Next() {
 		var exercise Exercise
-		err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.Distance, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
+		err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.Distance, &exercise.YoutubeURL, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -160,7 +164,8 @@ func (db *DB) SaveExercisesForWorkout(workoutID int64, exercises []Exercise) err
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	now := time.Now()
-	for _, exercise := range exercises {
+	for index := range exercises {
+		exercise := &exercises[index]
 		createdAt := exercise.CreatedAt
 		if createdAt.IsZero() {
 			createdAt = now
@@ -171,10 +176,16 @@ func (db *DB) SaveExercisesForWorkout(workoutID int64, exercises []Exercise) err
 			updatedAt = now
 		}
 
-		_, err := tx.Exec(query, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, workoutID, createdAt, updatedAt)
+		result, err := tx.Exec(query, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, workoutID, createdAt, updatedAt)
 		if err != nil {
 			return err
 		}
+		newID, err := result.LastInsertId()
+		if err != nil {
+			return err
+		}
+		exercise.ID = int(newID)
+		exercise.WorkoutID = int(workoutID)
 	}
 
 	return tx.Commit()
@@ -215,8 +226,8 @@ func (db *DB) SaveWorkoutsWithExercises(workouts []*WorkoutWithExercises, status
 	}
 
 	now := time.Now()
-	workoutQuery := `INSERT INTO workouts (workout_type, workout_date, status, profile_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
-	exerciseQuery := `INSERT INTO exercises (name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	workoutQuery := `INSERT INTO workouts (workout_type, workout_date, status, notes, profile_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+	exerciseQuery := `INSERT INTO exercises (name, weight, repetitions, sets, duration, distance, youtube_url, workout_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	for _, workout := range workouts {
 		workoutStatus := status
@@ -227,7 +238,7 @@ func (db *DB) SaveWorkoutsWithExercises(workouts []*WorkoutWithExercises, status
 			workoutStatus = "completed"
 		}
 
-		result, err := tx.Exec(workoutQuery, workout.Workout.WorkoutType, workout.Workout.WorkoutDate, workoutStatus, profileID, now, now)
+		result, err := tx.Exec(workoutQuery, workout.Workout.WorkoutType, workout.Workout.WorkoutDate, workoutStatus, workout.Workout.Notes, profileID, now, now)
 		if err != nil {
 			return err
 		}
@@ -237,11 +248,18 @@ func (db *DB) SaveWorkoutsWithExercises(workouts []*WorkoutWithExercises, status
 			return err
 		}
 
-		for _, exercise := range workout.Exercises {
-			_, err := tx.Exec(exerciseQuery, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, workoutID, now, now)
+		for index := range workout.Exercises {
+			exercise := &workout.Exercises[index]
+			result, err := tx.Exec(exerciseQuery, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, exercise.YoutubeURL, workoutID, now, now)
 			if err != nil {
 				return err
 			}
+			newID, err := result.LastInsertId()
+			if err != nil {
+				return err
+			}
+			exercise.ID = int(newID)
+			exercise.WorkoutID = int(workoutID)
 		}
 	}
 
@@ -333,11 +351,11 @@ func (db *DB) GetWorkoutByDate(date time.Time) (*WorkoutWithExercises, error) {
 		return nil, err
 	}
 
-	workoutQuery := `SELECT id, workout_type, workout_date, status, created_at, updated_at FROM workouts WHERE profile_id = ? AND DATE(workout_date) = DATE(?) LIMIT 1`
+	workoutQuery := `SELECT id, workout_type, workout_date, status, notes, created_at, updated_at FROM workouts WHERE profile_id = ? AND DATE(workout_date) = DATE(?) LIMIT 1`
 
 	var workout Workout
 	var createdAt, updatedAt sql.NullTime
-	err = db.conn.QueryRow(workoutQuery, profileID, date).Scan(&workout.ID, &workout.WorkoutType, &workout.WorkoutDate, &workout.Status, &createdAt, &updatedAt)
+	err = db.conn.QueryRow(workoutQuery, profileID, date).Scan(&workout.ID, &workout.WorkoutType, &workout.WorkoutDate, &workout.Status, &workout.Notes, &createdAt, &updatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -357,7 +375,7 @@ func (db *DB) GetWorkoutByDate(date time.Time) (*WorkoutWithExercises, error) {
 		workout.UpdatedAt = workout.WorkoutDate
 	}
 
-	exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
+	exercisesQuery := `SELECT id, name, weight, repetitions, sets, duration, distance, youtube_url, workout_id, created_at, updated_at FROM exercises WHERE workout_id = ? ORDER BY created_at`
 	rows, err := db.conn.Query(exercisesQuery, workout.ID)
 	if err != nil {
 		return nil, err
@@ -367,7 +385,7 @@ func (db *DB) GetWorkoutByDate(date time.Time) (*WorkoutWithExercises, error) {
 	var exercises []Exercise
 	for rows.Next() {
 		var exercise Exercise
-		err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.Distance, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
+		err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Weight, &exercise.Repetitions, &exercise.Sets, &exercise.Duration, &exercise.Distance, &exercise.YoutubeURL, &exercise.WorkoutID, &exercise.CreatedAt, &exercise.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -451,11 +469,19 @@ func (db *DB) UpdateWorkout(workoutID int, workoutType string, exercises []Exerc
 
 	// Insert new exercises
 	query := `INSERT INTO exercises (name, weight, repetitions, sets, duration, distance, workout_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	for _, exercise := range exercises {
-		_, err := tx.Exec(query, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, workoutID, now, now)
+	for index := range exercises {
+		exercise := &exercises[index]
+		result, err := tx.Exec(query, exercise.Name, exercise.Weight, exercise.Repetitions, exercise.Sets, exercise.Duration, exercise.Distance, workoutID, now, now)
 		if err != nil {
 			return err
 		}
+		newID, err := result.LastInsertId()
+		if err != nil {
+			return err
+		}
+		exercise.ID = int(newID)
+		exercise.WorkoutID = workoutID
+		exercise.YoutubeURL = ""
 	}
 
 	return tx.Commit()
@@ -524,6 +550,30 @@ func (db *DB) UpdateLastWorkoutStatus(status string) error {
 
 	if rowsAffected == 0 {
 		return fmt.Errorf("no workouts found to update")
+	}
+
+	return nil
+}
+
+// SetWorkoutNotes sets the commentary attached to a workout — typically what
+// an AI generator changed, improved, or reduced and why. Hermes and other
+// automations write here after a workout is planned or completed.
+func (db *DB) SetWorkoutNotes(workoutID int, notes string) error {
+	profileID, err := activeProfileID(db.conn)
+	if err != nil {
+		return err
+	}
+
+	result, err := db.conn.Exec(`UPDATE workouts SET notes = ?, updated_at = ? WHERE id = ? AND profile_id = ?`, notes, time.Now(), workoutID, profileID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("workout does not belong to the active profile")
 	}
 
 	return nil

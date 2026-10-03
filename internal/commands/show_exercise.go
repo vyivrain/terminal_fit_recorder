@@ -41,7 +41,11 @@ func (cmd *ShowLastWorkoutCommand) Execute(database *db.DB, ollamaClient api.Oll
 
 	fmt.Printf("\nWorkout Type: %s\n", workout.Workout.WorkoutType)
 	fmt.Printf("Date: %s\n", workout.Workout.WorkoutDate.Format("2006-01-02 15:04:05"))
-	fmt.Printf("Status: %s\n\n", workout.Workout.Status)
+	fmt.Printf("Status: %s\n", workout.Workout.Status)
+	if workout.Workout.Notes != "" {
+		fmt.Printf("Notes: %s\n", workout.Workout.Notes)
+	}
+	fmt.Println()
 
 	utils.PrintExercises(workout.Exercises)
 	return nil
@@ -57,11 +61,15 @@ func FormatWorkout(workout *db.WorkoutWithExercises) string {
 
 	buf.WriteString(fmt.Sprintf("\nWorkout Type: %s\n", workout.Workout.WorkoutType))
 	buf.WriteString(fmt.Sprintf("Date: %s\n", workout.Workout.WorkoutDate.Format("2006-01-02 15:04:05")))
-	buf.WriteString(fmt.Sprintf("Status: %s\n\n", workout.Workout.Status))
+	buf.WriteString(fmt.Sprintf("Status: %s\n", workout.Workout.Status))
+	if workout.Workout.Notes != "" {
+		buf.WriteString(fmt.Sprintf("Notes: %s\n", workout.Workout.Notes))
+	}
+	buf.WriteString("\n")
 
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "Exercise\tWeight\tReps\tSets\tDuration\tDistance")
-	fmt.Fprintln(w, "--------\t------\t----\t----\t--------\t--------")
+	fmt.Fprintln(w, "Exercise\tWeight\tReps\tSets\tDuration\tDistance\tVideo")
+	fmt.Fprintln(w, "--------\t------\t----\t----\t--------\t--------\t-----")
 
 	for _, exercise := range workout.Exercises {
 		weight := "-"
@@ -79,8 +87,13 @@ func FormatWorkout(workout *db.WorkoutWithExercises) string {
 			distance = fmt.Sprintf("%d m", exercise.Distance)
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n",
-			exercise.Name, weight, exercise.Repetitions, exercise.Sets, duration, distance)
+		video := "-"
+		if exercise.YoutubeURL != "" {
+			video = exercise.YoutubeURL
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\t%s\n",
+			exercise.Name, weight, exercise.Repetitions, exercise.Sets, duration, distance, video)
 	}
 
 	w.Flush()
@@ -124,10 +137,14 @@ func (cmd *ShowAllWorkoutsCommand) Execute(database *db.DB, ollamaClient api.Oll
 
 		fmt.Printf("Workout Type: %s\n", workout.Workout.WorkoutType)
 		fmt.Printf("Date: %s\n", workout.Workout.CreatedAt.Format("2006-01-02 15:04:05"))
-		fmt.Printf("Status: %s\n\n", workout.Workout.Status)
+		fmt.Printf("Status: %s\n", workout.Workout.Status)
+		if workout.Workout.Notes != "" {
+			fmt.Printf("Notes: %s\n", workout.Workout.Notes)
+		}
+		fmt.Println()
 
 		utils.PrintExercises(workout.Exercises)
-		fmt.Println(fmt.Sprintf("%s", "─────────────────────────────────────"))
+		fmt.Println("─────────────────────────────────────")
 	}
 
 	return nil

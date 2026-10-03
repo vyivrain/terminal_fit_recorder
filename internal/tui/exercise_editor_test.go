@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 
+	"terminal_fit_recorder/internal/ai"
 	"terminal_fit_recorder/internal/db"
 )
 
@@ -114,13 +115,13 @@ type refinementRecorder struct {
 	prompt   string
 }
 
-func (recorder *refinementRecorder) Refine(_ context.Context, _ db.AIModel, workout *db.WorkoutWithExercises, prompt string) (*db.WorkoutWithExercises, error) {
+func (recorder *refinementRecorder) Refine(_ context.Context, _ db.AIModel, workout *db.WorkoutWithExercises, prompt, _ string) (*ai.GenerationResult, error) {
 	recorder.received = workout
 	recorder.prompt = prompt
 	result := *workout
 	result.Exercises = append([]db.Exercise(nil), workout.Exercises...)
 	result.Exercises[1].Name = "Walk"
-	return &result, nil
+	return &ai.GenerationResult{Workout: &result}, nil
 }
 
 func TestTUIAIRefinementUsesManualEditsAndCanBeEditedAgain(t *testing.T) {

@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"terminal_fit_recorder/internal/api"
 	"terminal_fit_recorder/internal/db"
@@ -25,21 +26,26 @@ func (cmd *EditCommand) Name() string {
 
 func (cmd *EditCommand) Validate() error {
 	if len(cmd.Args) < 4 {
-		return fmt.Errorf("usage: terminal_fit_recorder exercise edit <DD-MM-YY|date <old_date> <new_date>|last status <planned|completed>>")
+		return fmt.Errorf("usage: terminal_fit_recorder exercise edit <DD-MM-YY|date <old> <new>|notes <DD-MM-YY> <text>|last <status <planned|completed>|notes <text>>>")
 	}
 
 	editTarget := cmd.Args[3]
 
-	// Check if it's "edit last status <planned|completed>"
+	// Check if it's "edit last status <planned|completed>" or "edit last notes <text>"
 	if editTarget == "last" {
 		if len(cmd.Args) < 6 {
-			return fmt.Errorf("usage: terminal_fit_recorder exercise edit last status <planned|completed>")
+			return fmt.Errorf("usage: terminal_fit_recorder exercise edit last <status <planned|completed>|notes <text>>")
 		}
-		if cmd.Args[4] != "status" {
-			return fmt.Errorf("usage: terminal_fit_recorder exercise edit last status <planned|completed>")
+		switch cmd.Args[4] {
+		case "status":
+			newStatus := strings.ToLower(cmd.Args[5])
+			cmd.command = NewEditWorkoutStatusCommand(newStatus)
+		case "notes":
+			notes := strings.Join(cmd.Args[5:], " ")
+			cmd.command = NewEditWorkoutNotesCommand(time.Time{}, notes)
+		default:
+			return fmt.Errorf("usage: terminal_fit_recorder exercise edit last <status <planned|completed>|notes <text>>")
 		}
-		newStatus := strings.ToLower(cmd.Args[5])
-		cmd.command = NewEditWorkoutStatusCommand(newStatus)
 		return cmd.command.Validate()
 	}
 
@@ -65,6 +71,20 @@ func (cmd *EditCommand) Validate() error {
 		return cmd.command.Validate()
 	}
 
+	// Check if it's "edit notes <date> <text>"
+	if editTarget == "notes" {
+		if len(cmd.Args) < 6 {
+			return fmt.Errorf("usage: terminal_fit_recorder exercise edit notes <DD-MM-YY> <text>")
+		}
+		date, err := utils.ParseEUDate(cmd.Args[4])
+		if err != nil {
+			return fmt.Errorf("invalid date format. Use DD-MM-YY (e.g., 31-12-25): %v", err)
+		}
+		notes := strings.Join(cmd.Args[5:], " ")
+		cmd.command = NewEditWorkoutNotesCommand(date, notes)
+		return cmd.command.Validate()
+	}
+
 	// Otherwise it's "edit <date>" for editing workout content
 	date, err := utils.ParseEUDate(editTarget)
 	if err != nil {
@@ -79,5 +99,5 @@ func (cmd *EditCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) 
 }
 
 func (cmd *EditCommand) HelpManual() string {
-	return "terminal_fit_recorder exercise edit <DD-MM-YY>\n    Edit a workout by date (e.g., 31-12-25).\n\nterminal_fit_recorder exercise edit date <DD-MM-YY> <DD-MM-YY>\n    Change workout date from old to new date.\n\nterminal_fit_recorder exercise edit last status <planned|completed>\n    Update the status of the last workout."
+	return "terminal_fit_recorder exercise edit <DD-MM-YY>\n    Edit a workout by date (e.g., 31-12-25).\n\nterminal_fit_recorder exercise edit date <DD-MM-YY> <DD-MM-YY>\n    Change workout date from old to new date.\n\nterminal_fit_recorder exercise edit notes <DD-MM-YY> <text>\n    Set the notes for the workout on that date.\n\nterminal_fit_recorder exercise edit last status <planned|completed>\n    Update the status of the last workout.\n\nterminal_fit_recorder exercise edit last notes <text>\n    Set the notes for the last workout."
 }

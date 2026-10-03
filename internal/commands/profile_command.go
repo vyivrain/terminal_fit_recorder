@@ -72,6 +72,42 @@ func (cmd *UseProfileCommand) Execute(database *db.DB, ollamaClient api.OllamaCl
 	return nil
 }
 
+type DescribeProfileCommand struct {
+	args        []string
+	description string
+}
+
+func NewDescribeProfileCommand(args ...string) *DescribeProfileCommand {
+	return &DescribeProfileCommand{args: args}
+}
+
+func (cmd *DescribeProfileCommand) Name() string { return "describe profile" }
+
+func (cmd *DescribeProfileCommand) Validate() error {
+	cmd.description = strings.TrimSpace(strings.Join(cmd.args, " "))
+	return nil
+}
+
+func (cmd *DescribeProfileCommand) HelpManual() string {
+	return "terminal_fit_recorder profile describe <text>\n    Set the active profile's description (habits, injuries, preferences) used as AI context. An empty <text> clears it."
+}
+
+func (cmd *DescribeProfileCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {
+	profile, err := database.GetActiveProfile()
+	if err != nil {
+		return fmt.Errorf("error loading active profile: %v", err)
+	}
+	if profile == nil {
+		return fmt.Errorf("no active profile")
+	}
+
+	if _, err := database.SetProfileDescription(profile.ID, cmd.description); err != nil {
+		return fmt.Errorf("error updating profile description: %v", err)
+	}
+	fmt.Printf("Updated description for profile %q\n", profile.Name)
+	return nil
+}
+
 type ListProfilesCommand struct {
 	args []string
 }
@@ -105,6 +141,9 @@ func (cmd *ListProfilesCommand) Execute(database *db.DB, ollamaClient api.Ollama
 			marker = "*"
 		}
 		fmt.Printf("%s %s\n", marker, profile.Name)
+		if description := strings.TrimSpace(profile.Description); description != "" {
+			fmt.Printf("    %s\n", description)
+		}
 	}
 	return nil
 }

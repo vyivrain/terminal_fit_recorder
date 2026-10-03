@@ -87,6 +87,47 @@ func (s *EditCommandTestSuite) TestEditCommand_Validate_EditLastStatus_InvalidSt
 	assert.Contains(s.T(), err.Error(), "status must be")
 }
 
+// Test "edit last notes <text>" routing
+
+func (s *EditCommandTestSuite) TestEditCommand_Validate_EditLastNotes_Valid() {
+	cmd := NewEditCommand([]string{"terminal_fit_recorder", "exercise", "edit", "last", "notes", "Bumped", "squat", "to", "102.5kg"})
+	err := cmd.Validate()
+	assert.NoError(s.T(), err)
+	assert.NotNil(s.T(), cmd.command)
+	assert.Equal(s.T(), "edit workout notes", cmd.command.Name())
+}
+
+func (s *EditCommandTestSuite) TestEditCommand_Validate_EditLastNotes_MissingArgs() {
+	cmd := NewEditCommand([]string{"terminal_fit_recorder", "exercise", "edit", "last", "notes"})
+	err := cmd.Validate()
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "usage:")
+}
+
+// Test "edit notes <date> <text>" routing
+
+func (s *EditCommandTestSuite) TestEditCommand_Validate_EditNotesByDate_Valid() {
+	cmd := NewEditCommand([]string{"terminal_fit_recorder", "exercise", "edit", "notes", "01-01-25", "Felt", "strong"})
+	err := cmd.Validate()
+	assert.NoError(s.T(), err)
+	assert.NotNil(s.T(), cmd.command)
+	assert.Equal(s.T(), "edit workout notes", cmd.command.Name())
+}
+
+func (s *EditCommandTestSuite) TestEditCommand_Validate_EditNotesByDate_InvalidDate() {
+	cmd := NewEditCommand([]string{"terminal_fit_recorder", "exercise", "edit", "notes", "2025-01-01", "Felt", "strong"})
+	err := cmd.Validate()
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "invalid date format")
+}
+
+func (s *EditCommandTestSuite) TestEditCommand_Validate_EditNotesByDate_MissingText() {
+	cmd := NewEditCommand([]string{"terminal_fit_recorder", "exercise", "edit", "notes", "01-01-25"})
+	err := cmd.Validate()
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "usage:")
+}
+
 // Test "edit date <old> <new>" routing
 
 func (s *EditCommandTestSuite) TestEditCommand_Validate_EditDate_Valid() {
@@ -292,6 +333,43 @@ func (s *EditCommandTestSuite) TestDatabaseIntegration_UpdateWorkoutDate_Conflic
 	err = s.DB.UpdateWorkoutDate(date1, date2)
 	assert.Error(s.T(), err) // Should error due to constraint
 	assert.Contains(s.T(), err.Error(), "workout already exists")
+}
+
+// Database integration tests for notes editing
+
+func (s *EditCommandTestSuite) TestDatabaseIntegration_EditLastWorkoutNotes() {
+	workoutDate := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
+	_, err := s.DB.CreateWorkout("strength", "completed", workoutDate)
+	require.NoError(s.T(), err)
+
+	cmd := NewEditWorkoutNotesCommand(time.Time{}, "Bumped squat to 102.5kg after 3 sessions at 100kg.")
+	require.NoError(s.T(), cmd.Execute(s.DB, nil))
+
+	workout, err := s.DB.GetLastWorkout()
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), workout)
+	assert.Equal(s.T(), "Bumped squat to 102.5kg after 3 sessions at 100kg.", workout.Workout.Notes)
+}
+
+func (s *EditCommandTestSuite) TestDatabaseIntegration_EditWorkoutNotesByDate() {
+	workoutDate := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
+	_, err := s.DB.CreateWorkout("strength", "completed", workoutDate)
+	require.NoError(s.T(), err)
+
+	cmd := NewEditWorkoutNotesCommand(workoutDate, "Felt strong today.")
+	require.NoError(s.T(), cmd.Execute(s.DB, nil))
+
+	workout, err := s.DB.GetWorkoutByDate(workoutDate)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), workout)
+	assert.Equal(s.T(), "Felt strong today.", workout.Workout.Notes)
+}
+
+func (s *EditCommandTestSuite) TestDatabaseIntegration_EditWorkoutNotes_NoWorkout() {
+	cmd := NewEditWorkoutNotesCommand(time.Time{}, "Should not apply")
+	err := cmd.Execute(s.DB, nil)
+	assert.Error(s.T(), err)
+	assert.Contains(s.T(), err.Error(), "no workout found")
 }
 
 // TestEditCommandTestSuite runs the test suite

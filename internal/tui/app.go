@@ -17,6 +17,7 @@ import (
 
 	"terminal_fit_recorder/internal/ai"
 	"terminal_fit_recorder/internal/db"
+	"terminal_fit_recorder/internal/youtube"
 )
 
 type screen int
@@ -39,6 +40,7 @@ type profileInputAction int
 const (
 	profileCreate profileInputAction = iota
 	profileRename
+	profileDescribe
 )
 
 type confirmAction int
@@ -73,10 +75,87 @@ const (
 )
 
 type aiResultMsg struct {
-	workout   *db.WorkoutWithExercises
-	workouts  []*db.WorkoutWithExercises
-	err       error
-	operation aiOperation
+	workout       *db.WorkoutWithExercises
+	workouts      []*db.WorkoutWithExercises
+	profileUpdate string
+	err           error
+	operation     aiOperation
+}
+
+// videoLookupMsg carries the outcome of one background technique-video
+// search for a single, already-saved exercise.
+type videoLookupMsg struct {
+	exerciseID int
+	url        string
+	err        error
+}
+
+// enqueueVideoLookups returns a batched command that searches, in the
+// background, for a short technique video for every exercise in workouts
+// that does not already have one. It returns nil when there is nothing to
+// look up or no finder is configured.
+func (app *App) enqueueVideoLookups(workouts []*db.WorkoutWithExercises) tea.Cmd {
+	if app.videoFinder == nil {
+		return nil
+	}
+
+	var commands []tea.Cmd
+	for _, workout := range workouts {
+		if workout == nil {
+			continue
+		}
+		for _, exercise := range workout.Exercises {
+			if exercise.ID == 0 || exercise.YoutubeURL != "" || strings.TrimSpace(exercise.Name) == "" {
+				continue
+			}
+			exerciseID := exercise.ID
+			name := exercise.Name
+			commands = append(commands, func() tea.Msg {
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				defer cancel()
+				url, err := app.videoFinder.Find(ctx, name)
+				return videoLookupMsg{exerciseID: exerciseID, url: url, err: err}
+			})
+		}
+	}
+	if len(commands) == 0 {
+		return nil
+	}
+	return tea.Batch(commands...)
+}
+
+// applyVideoLookup records a background technique-video search's result. A
+// search failure (e.g. yt-dlp missing) surfaces once as a status message
+// rather than once per exercise; finding nothing under a minute is a normal,
+// silent outcome, not an error.
+func (app *App) applyVideoLookup(result videoLookupMsg) (tea.Model, tea.Cmd) {
+	if result.err != nil {
+		if !app.videoLookupWarned {
+			app.videoLookupWarned = true
+			app.statusMessage = "Could not look up technique videos (is yt-dlp installed?)"
+		}
+		return app, nil
+	}
+	if result.url == "" {
+		return app, nil
+	}
+	if err := app.database.SetExerciseYoutubeURL(result.exerciseID, result.url); err != nil {
+		return app, nil
+	}
+	if err := app.refreshWorkouts(); err != nil {
+		return app, nil
+	}
+	if app.detailWorkout != nil {
+		for index := range app.detailWorkout.Exercises {
+			if app.detailWorkout.Exercises[index].ID == result.exerciseID {
+				app.detailWorkout.Exercises[index].YoutubeURL = result.url
+				if app.screen == screenWorkoutDetail {
+					app.setViewedWorkout(app.detailWorkout)
+				}
+			}
+		}
+	}
+	return app, nil
 }
 
 type workoutItem struct{ workout db.WorkoutWithExercises }
@@ -100,10 +179,18 @@ type profileItem struct{ profile db.Profile }
 func (item profileItem) FilterValue() string { return item.profile.Name }
 func (item profileItem) Title() string       { return item.profile.Name }
 func (item profileItem) Description() string {
+	status := "Press enter to make active"
 	if item.profile.IsActive {
-		return "Active · default"
+		status = "Active · default"
 	}
-	return "Press enter to make active"
+	if description := strings.TrimSpace(item.profile.Description); description != "" {
+		const previewLimit = 60
+		if runes := []rune(description); len(runes) > previewLimit {
+			description = string(runes[:previewLimit]) + "…"
+		}
+		status += "  ·  " + description
+	}
+	return status
 }
 
 type modelItem struct{ model db.AIModel }
@@ -117,9 +204,19 @@ func (item modelItem) Description() string {
 	return item.model.ModelID
 }
 
+// exerciseVideoFinder is the subset of *youtube.Finder the TUI depends on,
+// so tests can inject a fake instead of shelling out to yt-dlp.
+type exerciseVideoFinder interface {
+	Find(ctx context.Context, exerciseName string) (string, error)
+}
+
 type App struct {
-	database  *db.DB
-	generator ai.Generator
+	database    *db.DB
+	generator   ai.Generator
+	videoFinder exerciseVideoFinder
+	// videoLookupWarned keeps a failing technique-video lookup (e.g. yt-dlp
+	// not installed) from popping a status message for every exercise.
+	videoLookupWarned bool
 
 	screen          screen
 	width           int
@@ -137,6 +234,10 @@ type App struct {
 	previewWorkouts []*db.WorkoutWithExercises
 	previewIndex    int
 	previewOrigin   aiOperation
+	// pendingProfileUpdate is a profile-description change the AI suggested
+	// alongside the current preview. It is shown for review and only written
+	// to the profile when the previewed workout(s) are saved.
+	pendingProfileUpdate string
 
 	input              textinput.Model
 	profileInputAction profileInputAction
@@ -160,10 +261,11 @@ type App struct {
 
 func New(database *db.DB, generator ai.Generator) (*App, error) {
 	app := &App{
-		database:  database,
-		generator: generator,
-		width:     88,
-		height:    28,
+		database:    database,
+		generator:   generator,
+		videoFinder: youtube.NewFinder(3),
+		width:       88,
+		height:      28,
 	}
 
 	app.spinner = spinner.New()
@@ -221,6 +323,10 @@ func (app *App) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return app, nil
 	}
 
+	if result, ok := message.(videoLookupMsg); ok {
+		return app.applyVideoLookup(result)
+	}
+
 	if result, ok := message.(aiResultMsg); ok {
 		app.loading = false
 		if app.aiCancel != nil {
@@ -265,6 +371,7 @@ func (app *App) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			app.previewIndex = 0
 			app.previewOrigin = aiGenerate
 		}
+		app.pendingProfileUpdate = result.profileUpdate
 		app.screen = screenAIPreview
 		app.setViewedWorkout(app.currentPreviewWorkout())
 		return app, nil
@@ -473,6 +580,11 @@ func (app *App) updateProfiles(message tea.Msg) (tea.Model, tea.Cmd) {
 				app.startProfileInput(profileRename, selected.profile.ID, selected.profile.Name)
 				return app, textinput.Blink
 			}
+		case "i":
+			if selected, ok := app.profileList.SelectedItem().(profileItem); ok {
+				app.startProfileInput(profileDescribe, selected.profile.ID, selected.profile.Description)
+				return app, textinput.Blink
+			}
 		case "d":
 			if selected, ok := app.profileList.SelectedItem().(profileItem); ok {
 				app.profileInputTarget = selected.profile.ID
@@ -537,12 +649,14 @@ func (app *App) updateWorkoutForm(message tea.Msg) (tea.Model, tea.Cmd) {
 			app.modalError = err.Error()
 			return app, nil
 		}
+		lookupCmd := app.enqueueVideoLookups([]*db.WorkoutWithExercises{workout})
 		if err := app.refreshWorkouts(); err != nil {
 			app.modalError = err.Error()
 			return app, nil
 		}
 		app.statusMessage = "Workout saved"
 		app.screen = screenWorkouts
+		return app, tea.Batch(command, lookupCmd)
 	}
 	return app, command
 }
@@ -551,9 +665,15 @@ func (app *App) startProfileInput(action profileInputAction, profileID int, valu
 	app.profileInputAction = action
 	app.profileInputTarget = profileID
 	app.input = textinput.New()
-	app.input.CharLimit = 80
-	app.input.Width = 48
-	app.input.Placeholder = "Profile name"
+	if action == profileDescribe {
+		app.input.CharLimit = 300
+		app.input.Width = 68
+		app.input.Placeholder = "Habits, injuries, preferences for the AI coach"
+	} else {
+		app.input.CharLimit = 80
+		app.input.Width = 48
+		app.input.Placeholder = "Profile name"
+	}
 	app.input.SetValue(value)
 	app.input.Focus()
 	app.screen = screenProfileInput
@@ -569,12 +689,15 @@ func (app *App) updateProfileInput(message tea.Msg) (tea.Model, tea.Cmd) {
 			app.screen = screenProfiles
 			return app, nil
 		case tea.KeyEnter:
-			name := strings.TrimSpace(app.input.Value())
+			value := strings.TrimSpace(app.input.Value())
 			var err error
-			if app.profileInputAction == profileCreate {
-				_, err = app.database.CreateProfile(name)
-			} else {
-				_, err = app.database.RenameProfile(app.profileInputTarget, name)
+			switch app.profileInputAction {
+			case profileCreate:
+				_, err = app.database.CreateProfile(value)
+			case profileDescribe:
+				_, err = app.database.SetProfileDescription(app.profileInputTarget, value)
+			default:
+				_, err = app.database.RenameProfile(app.profileInputTarget, value)
 			}
 			if err != nil {
 				app.modalError = err.Error()
@@ -649,25 +772,37 @@ func (app *App) updateAIPreview(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		count := len(app.previewWorkouts)
 		origin := app.previewOrigin
+		profileUpdate := app.pendingProfileUpdate
 		if err := app.database.SaveWorkoutsWithExercises(app.previewWorkouts, "planned"); err != nil {
 			app.modalError = err.Error()
 			return app, nil
 		}
-		if err := app.refreshWorkouts(); err != nil {
+		if profileUpdate != "" && app.activeProfile != nil {
+			if _, err := app.database.SetProfileDescription(app.activeProfile.ID, profileUpdate); err != nil {
+				app.modalError = err.Error()
+				return app, nil
+			}
+		}
+		lookupCmd := app.enqueueVideoLookups(app.previewWorkouts)
+		if err := app.refreshAll(); err != nil {
 			app.modalError = err.Error()
 			return app, nil
 		}
 		app.clearPreview()
-		if origin == aiImport {
+		switch {
+		case origin == aiImport:
 			noun := "workout"
 			if count != 1 {
 				noun = "workouts"
 			}
 			app.statusMessage = fmt.Sprintf("Imported %d planned %s", count, noun)
-		} else {
+		case profileUpdate != "":
+			app.statusMessage = "AI workout saved as planned · profile description updated"
+		default:
 			app.statusMessage = "AI workout saved as planned"
 		}
 		app.screen = screenWorkouts
+		return app, lookupCmd
 	case "e":
 		if workout := app.currentPreviewWorkout(); workout != nil {
 			app.exerciseEditor = newExerciseEditor(workout, app.width, app.height)
@@ -717,6 +852,7 @@ func (app *App) clearPreview() {
 	app.previewWorkouts = nil
 	app.previewIndex = 0
 	app.previewOrigin = aiGenerate
+	app.pendingProfileUpdate = ""
 }
 
 func (app *App) setViewedWorkout(workout *db.WorkoutWithExercises) {
@@ -767,19 +903,29 @@ func (app *App) startGeneration(refine bool) (tea.Model, tea.Cmd) {
 	preview := app.currentPreviewWorkout()
 	prompt := app.refinePrompt
 	history := app.currentWorkouts()
+	var profileDescription string
+	if app.activeProfile != nil {
+		profileDescription = app.activeProfile.Description
+	}
 	command := func() tea.Msg {
-		var workout *db.WorkoutWithExercises
+		var result *ai.GenerationResult
 		var err error
 		if refine {
-			workout, err = app.generator.Refine(ctx, selectedModel, preview, prompt)
+			result, err = app.generator.Refine(ctx, selectedModel, preview, prompt, profileDescription)
 		} else {
-			workout, err = app.generator.Generate(ctx, selectedModel, history)
+			result, err = app.generator.Generate(ctx, selectedModel, history, profileDescription)
 		}
 		operation := aiGenerate
 		if refine {
 			operation = aiRefine
 		}
-		return aiResultMsg{workout: workout, err: err, operation: operation}
+		var workout *db.WorkoutWithExercises
+		var profileUpdate string
+		if result != nil {
+			workout = result.Workout
+			profileUpdate = result.ProfileUpdate
+		}
+		return aiResultMsg{workout: workout, profileUpdate: profileUpdate, err: err, operation: operation}
 	}
 	return app, tea.Batch(app.spinner.Tick, command)
 }
@@ -1061,7 +1207,7 @@ func (app *App) View() string {
 		help = "↑/↓ scroll  ·  d delete  ·  esc back"
 	case screenProfiles:
 		body = app.profileList.View()
-		help = "enter set default  ·  c create  ·  e rename  ·  d delete  ·  / filter  ·  esc back"
+		help = "enter set default  ·  c create  ·  e rename  ·  i describe  ·  d delete  ·  / filter  ·  esc back"
 	case screenModels:
 		body = app.modelList.View()
 		help = "enter select  ·  / filter  ·  esc back"
@@ -1070,8 +1216,11 @@ func (app *App) View() string {
 		help = "tab next  ·  ctrl+a add exercise  ·  ctrl+s save  ·  esc cancel"
 	case screenProfileInput:
 		title := "Create profile"
-		if app.profileInputAction == profileRename {
+		switch app.profileInputAction {
+		case profileRename:
 			title = "Rename profile"
+		case profileDescribe:
+			title = "Edit profile description"
 		}
 		if app.onboarding {
 			title = "Welcome — create your first profile"
@@ -1088,6 +1237,13 @@ func (app *App) View() string {
 		help = "enter analyze  ·  esc cancel"
 	case screenAIPreview:
 		body = app.detailViewport.View()
+		if app.pendingProfileUpdate != "" {
+			width := contentWidth(app.width)
+			callout := successStyle.Bold(true).Render("Profile update suggested") + "\n" +
+				mutedStyle.Width(width).Render(app.pendingProfileUpdate) + "\n" +
+				mutedStyle.Render("Saved together with this workout (s)")
+			body = callout + "\n\n" + body
+		}
 		if app.previewOrigin == aiImport {
 			counter := fmt.Sprintf("Import preview  ·  workout %d of %d", app.previewIndex+1, len(app.previewWorkouts))
 			body = titleStyle.Render(counter) + "\n\n" + body
@@ -1167,11 +1323,21 @@ func workoutDetailView(workout *db.WorkoutWithExercises, width int) string {
 		mutedStyle.Render(workout.Workout.WorkoutDate.Format("Monday, 02 January 2006") + "  ·  " + status),
 		"",
 	}
+	if notes := strings.TrimSpace(workout.Workout.Notes); notes != "" {
+		rows = append(rows,
+			successStyle.Bold(true).Render("Notes"),
+			mutedStyle.Width(contentWidth(width)).Render(notes),
+			"",
+		)
+	}
 	for index, exercise := range workout.Exercises {
 		rows = append(rows,
 			fmt.Sprintf("%s  %s", titleStyle.Render(fmt.Sprintf("%02d", index+1)), sectionStyle.Render(exercise.Name)),
 			"    "+mutedStyle.Render(exerciseSummary(exercise)),
 		)
+		if exercise.YoutubeURL != "" {
+			rows = append(rows, "    "+mutedStyle.Render("▶ "+exercise.YoutubeURL))
+		}
 		if index < len(workout.Exercises)-1 {
 			rows = append(rows, "")
 		}

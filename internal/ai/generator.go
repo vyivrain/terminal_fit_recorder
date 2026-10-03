@@ -46,9 +46,18 @@ Follow the user prompt's workout constraints and return only its requested JSON 
 )
 
 type Generator interface {
-	Generate(ctx context.Context, model db.AIModel, history []db.WorkoutWithExercises) (*db.WorkoutWithExercises, error)
-	Refine(ctx context.Context, model db.AIModel, workout *db.WorkoutWithExercises, instruction string) (*db.WorkoutWithExercises, error)
+	Generate(ctx context.Context, model db.AIModel, history []db.WorkoutWithExercises, profileDescription string) (*GenerationResult, error)
+	Refine(ctx context.Context, model db.AIModel, workout *db.WorkoutWithExercises, instruction, profileDescription string) (*GenerationResult, error)
 	ImportNotes(ctx context.Context, model db.AIModel, notes string, history []db.WorkoutWithExercises) ([]*db.WorkoutWithExercises, error)
+}
+
+// GenerationResult pairs the generated or refined workout with any lasting
+// fact about the person the model learned along the way (e.g. a new injury
+// or limitation mentioned in a refine instruction) and wants remembered on
+// their profile. ProfileUpdate is empty when nothing changed.
+type GenerationResult struct {
+	Workout       *db.WorkoutWithExercises
+	ProfileUpdate string
 }
 
 type RejectedError struct {
@@ -145,9 +154,9 @@ func NewCLIGenerator() *CLIGenerator {
 	}
 }
 
-func (g *CLIGenerator) Generate(ctx context.Context, model db.AIModel, history []db.WorkoutWithExercises) (*db.WorkoutWithExercises, error) {
+func (g *CLIGenerator) Generate(ctx context.Context, model db.AIModel, history []db.WorkoutWithExercises, profileDescription string) (*GenerationResult, error) {
 	expectedDate := g.now().Format("2006-01-02")
-	output, err := g.request(ctx, model, generationPrompt(history, expectedDate), workoutResponseSchema)
+	output, err := g.request(ctx, model, generationPrompt(history, expectedDate, profileDescription), workoutResponseSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +167,7 @@ func (g *CLIGenerator) Generate(ctx context.Context, model db.AIModel, history [
 	return validateEnvelope(envelope, expectedDate, "")
 }
 
-func (g *CLIGenerator) Refine(ctx context.Context, model db.AIModel, workout *db.WorkoutWithExercises, instruction string) (*db.WorkoutWithExercises, error) {
+func (g *CLIGenerator) Refine(ctx context.Context, model db.AIModel, workout *db.WorkoutWithExercises, instruction, profileDescription string) (*GenerationResult, error) {
 	if workout == nil {
 		return nil, fmt.Errorf("workout is required")
 	}
@@ -168,7 +177,7 @@ func (g *CLIGenerator) Refine(ctx context.Context, model db.AIModel, workout *db
 	}
 
 	expectedDate := workout.Workout.WorkoutDate.Format("2006-01-02")
-	output, err := g.request(ctx, model, refinementPrompt(workout, instruction), workoutResponseSchema)
+	output, err := g.request(ctx, model, refinementPrompt(workout, instruction, profileDescription), workoutResponseSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -313,9 +322,10 @@ func modelCommand(model db.AIModel, directory, schemaPath, prompt, responseSchem
 }
 
 type generationEnvelope struct {
-	Accepted bool            `json:"accepted"`
-	Message  string          `json:"message"`
-	Workout  *workoutPayload `json:"workout"`
+	Accepted      bool            `json:"accepted"`
+	Message       string          `json:"message"`
+	Workout       *workoutPayload `json:"workout"`
+	ProfileUpdate string          `json:"profileUpdate"`
 }
 
 type importEnvelope struct {
@@ -339,7 +349,7 @@ type exercisePayload struct {
 	Distance int     `json:"distance"`
 }
 
-func validateEnvelope(envelope generationEnvelope, expectedDate, expectedType string) (*db.WorkoutWithExercises, error) {
+func validateEnvelope(envelope generationEnvelope, expectedDate, expectedType string) (*GenerationResult, error) {
 	if !envelope.Accepted {
 		return nil, &RejectedError{Reason: strings.TrimSpace(envelope.Message)}
 	}
@@ -347,7 +357,26 @@ func validateEnvelope(envelope generationEnvelope, expectedDate, expectedType st
 		return nil, fmt.Errorf("accepted response did not contain a workout")
 	}
 
-	return validateWorkoutPayload(envelope.Workout, expectedDate, expectedType)
+	workout, err := validateWorkoutPayload(envelope.Workout, expectedDate, expectedType)
+	if err != nil {
+		return nil, err
+	}
+	workout.Workout.Notes = capAdvisoryText(envelope.Message, 500)
+	return &GenerationResult{
+		Workout:       workout,
+		ProfileUpdate: capAdvisoryText(envelope.ProfileUpdate, 1000),
+	}, nil
+}
+
+// capAdvisoryText normalizes an accepted response's optional advisory text
+// (a workout note or a suggested profile update) and caps it so a misbehaving
+// model cannot flood the preview or the stored profile.
+func capAdvisoryText(text string, limit int) string {
+	text = strings.TrimSpace(text)
+	if runes := []rune(text); len(runes) > limit {
+		text = strings.TrimSpace(string(runes[:limit]))
+	}
+	return text
 }
 
 func validateImportEnvelope(envelope importEnvelope, schedule []scheduledWorkoutDate) ([]*db.WorkoutWithExercises, error) {
@@ -573,9 +602,10 @@ const workoutResponseSchema = `{
         ` + workoutObjectSchema + `,
         {"type": "null"}
       ]
-    }
+    },
+    "profileUpdate": {"type": "string"}
   },
-  "required": ["accepted", "message", "workout"]
+  "required": ["accepted", "message", "workout", "profileUpdate"]
 }`
 
 const importResponseSchema = `{

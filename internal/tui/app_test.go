@@ -14,16 +14,17 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
 
+	"terminal_fit_recorder/internal/ai"
 	"terminal_fit_recorder/internal/db"
 )
 
 type fakeGenerator struct{}
 
-func (fakeGenerator) Generate(context.Context, db.AIModel, []db.WorkoutWithExercises) (*db.WorkoutWithExercises, error) {
+func (fakeGenerator) Generate(context.Context, db.AIModel, []db.WorkoutWithExercises, string) (*ai.GenerationResult, error) {
 	return nil, errors.New("model endpoint unavailable")
 }
 
-func (fakeGenerator) Refine(context.Context, db.AIModel, *db.WorkoutWithExercises, string) (*db.WorkoutWithExercises, error) {
+func (fakeGenerator) Refine(context.Context, db.AIModel, *db.WorkoutWithExercises, string, string) (*ai.GenerationResult, error) {
 	return nil, errors.New("model endpoint unavailable")
 }
 
@@ -229,6 +230,49 @@ func TestTUIBrowsesAndSavesImportedWorkoutsAsPlanned(t *testing.T) {
 	require.Len(t, saved, 2)
 	require.Equal(t, "planned", saved[0].Workout.Status)
 	require.Equal(t, "planned", saved[1].Workout.Status)
+}
+
+func TestTUISavesSuggestedProfileUpdateAlongsideGeneratedWorkout(t *testing.T) {
+	database := tuiTestDatabase(t)
+	app, err := New(database, fakeGenerator{})
+	require.NoError(t, err)
+	require.NotNil(t, app.activeProfile)
+
+	workout := &db.WorkoutWithExercises{
+		Workout:   db.Workout{WorkoutType: "strength", WorkoutDate: time.Date(2026, time.September, 7, 0, 0, 0, 0, time.Local)},
+		Exercises: []db.Exercise{{Name: "Squat", Weight: 100, Repetitions: 5, Sets: 5}},
+	}
+	app.Update(aiResultMsg{operation: aiGenerate, workout: workout, profileUpdate: "Bad left knee as of Sept 2026 — avoid deep squats and lunges."})
+	require.Equal(t, screenAIPreview, app.screen)
+	require.Contains(t, app.View(), "Profile update suggested")
+	require.Contains(t, app.View(), "Bad left knee")
+
+	sendKey(app, "s")
+	require.Equal(t, screenWorkouts, app.screen)
+	require.Contains(t, app.statusMessage, "profile description updated")
+	require.Empty(t, app.pendingProfileUpdate)
+
+	active, err := database.GetActiveProfile()
+	require.NoError(t, err)
+	require.Equal(t, "Bad left knee as of Sept 2026 — avoid deep squats and lunges.", active.Description)
+}
+
+func TestTUIDiscardingPreviewDropsSuggestedProfileUpdate(t *testing.T) {
+	database := tuiTestDatabase(t)
+	app, err := New(database, fakeGenerator{})
+	require.NoError(t, err)
+
+	workout := &db.WorkoutWithExercises{
+		Workout:   db.Workout{WorkoutType: "strength", WorkoutDate: time.Date(2026, time.September, 7, 0, 0, 0, 0, time.Local)},
+		Exercises: []db.Exercise{{Name: "Squat", Weight: 100, Repetitions: 5, Sets: 5}},
+	}
+	app.Update(aiResultMsg{operation: aiGenerate, workout: workout, profileUpdate: "Should not be saved"})
+	sendKey(app, "esc")
+	require.Empty(t, app.pendingProfileUpdate)
+
+	active, err := database.GetActiveProfile()
+	require.NoError(t, err)
+	require.Empty(t, active.Description)
 }
 
 func TestTUILongImportPreviewCanScroll(t *testing.T) {
