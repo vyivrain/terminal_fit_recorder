@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,12 +13,16 @@ import (
 )
 
 type fakePlanVideoFinder struct {
-	urls  map[string]string
+	urls map[string]string
+
+	mu    sync.Mutex
 	calls []string
 }
 
 func (finder *fakePlanVideoFinder) Find(_ context.Context, exerciseName string) (string, error) {
+	finder.mu.Lock()
 	finder.calls = append(finder.calls, exerciseName)
+	finder.mu.Unlock()
 	return finder.urls[exerciseName], nil
 }
 
