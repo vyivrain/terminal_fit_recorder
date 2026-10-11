@@ -30,7 +30,8 @@ func (cmd *HelpCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) 
 	var output strings.Builder
 
 	output.WriteString("terminal_fit_recorder - Personal fitness workout recorder tool\n\n")
-	output.WriteString("Usage: terminal_fit_recorder <exercise|profile|ai> <command> [arguments]\n\n")
+	output.WriteString("Usage: terminal_fit_recorder <exercise|profile|ai> <command> [arguments]\n")
+	output.WriteString("       terminal_fit_recorder mcp    (MCP stdio server for AI agents)\n\n")
 	output.WriteString("Commands are:\n\n")
 
 	// Create instances of all commands to get their help manuals

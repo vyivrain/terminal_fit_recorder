@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"terminal_fit_recorder/internal/commands"
 	"terminal_fit_recorder/internal/config"
 	"terminal_fit_recorder/internal/db"
+	"terminal_fit_recorder/internal/mcpserver"
 	"terminal_fit_recorder/internal/tui"
 )
 
@@ -44,6 +46,23 @@ func main() {
 
 		if err := tui.Run(database, ai.NewCLIGenerator()); err != nil {
 			log.Fatal("TUI failed:", err)
+		}
+		return
+	}
+
+	// MCP stdio server for AI agents. stdout carries the protocol, so nothing
+	// else may print to it; like the TUI, it creates the database on demand.
+	if len(os.Args) == 2 && os.Args[1] == "mcp" {
+		database, err := db.New(dbPath)
+		if err != nil {
+			log.Fatal("Failed to initialize database:", err)
+		}
+		defer database.Close()
+
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := mcpserver.Run(ctx, database); err != nil && ctx.Err() == nil {
+			log.Fatal("MCP server failed:", err)
 		}
 		return
 	}

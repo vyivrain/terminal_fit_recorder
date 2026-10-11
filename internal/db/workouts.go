@@ -578,3 +578,29 @@ func (db *DB) SetWorkoutNotes(workoutID int, notes string) error {
 
 	return nil
 }
+
+// SetWorkoutStatus marks a workout as "planned" or "completed".
+func (db *DB) SetWorkoutStatus(workoutID int, status string) error {
+	if status != "planned" && status != "completed" {
+		return fmt.Errorf("status must be 'planned' or 'completed', got: %s", status)
+	}
+
+	profileID, err := activeProfileID(db.conn)
+	if err != nil {
+		return err
+	}
+
+	result, err := db.conn.Exec(`UPDATE workouts SET status = ?, updated_at = ? WHERE id = ? AND profile_id = ?`, status, time.Now(), workoutID, profileID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("workout does not belong to the active profile")
+	}
+
+	return nil
+}

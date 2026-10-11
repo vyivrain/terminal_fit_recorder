@@ -160,6 +160,40 @@ terminal_fit_recorder profile list           # List profiles; * marks the active
 terminal_fit_recorder profile help           # Display all commands
 ```
 
+## MCP Server (AI agents)
+
+`terminal_fit_recorder mcp` runs a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, so Claude, Hermes, or any MCP client can read and log workouts directly. It uses the same database as the TUI (created on first run) and every tool acts on the active profile.
+
+| Tool | What it does |
+| --- | --- |
+| `list_profiles` / `use_profile` | List profiles with descriptions; switch the active one (also changes the TUI default) |
+| `list_workouts` | Newest first; optional `status`, `from`/`to` (YYYY-MM-DD), `limit` |
+| `get_workout` | One workout by `date`, with exercises and notes |
+| `list_exercise_names` | Names already in use, so agents keep naming consistent |
+| `log_workout` | Save a `completed` (default) or `planned` workout; one per day |
+| `set_workout_status` / `set_workout_notes` | Update the workout on a date |
+| `delete_workout` | Permanently delete the workout on a date |
+
+Exercise fields: `name`, `weight_kg`, `reps`, `sets`, `duration_min`, `distance_m`, `youtube_url`.
+
+**Claude Code:**
+
+```bash
+claude mcp add --scope user fit -- terminal_fit_recorder mcp
+```
+
+**Claude Desktop, Hermes, and other clients** — add to the client's MCP config (use the absolute path if the binary is not on the client's `PATH`, e.g. `~/.local/bin/terminal_fit_recorder`):
+
+```json
+{
+  "mcpServers": {
+    "fit": { "command": "terminal_fit_recorder", "args": ["mcp"] }
+  }
+}
+```
+
+The connected agent is already an LLM, so it plans workouts itself and saves them with `log_workout` using `status: "planned"`. `exercise plan` stays available when you want the app's own generator.
+
 ## Configuration
 
 The legacy `exercise generate` command uses these environment variables for Ollama configuration. They do not affect TUI generation:

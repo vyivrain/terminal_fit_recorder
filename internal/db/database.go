@@ -20,6 +20,10 @@ func New(dbPath string) (*DB, error) {
 	// For in-memory databases, use shared cache mode so all connections see the same data
 	if dbPath == ":memory:" {
 		dbPath = "file::memory:?cache=shared"
+	} else {
+		// The TUI, CLI commands, and the MCP server may hold the same file
+		// open at once; wait for a competing write instead of failing.
+		dbPath += "?_busy_timeout=5000"
 	}
 
 	conn, err := sql.Open("sqlite3", dbPath)
