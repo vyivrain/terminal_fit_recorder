@@ -4,9 +4,9 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	_ "modernc.org/sqlite"
 
 	"terminal_fit_recorder/internal/db"
 )

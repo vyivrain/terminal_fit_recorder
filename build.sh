@@ -6,6 +6,9 @@ VERSION=${1:-"v1.0.0"}
 APP_NAME="terminal_fit_recorder"
 BUILD_DIR="build"
 
+# The SQLite driver is pure Go, so every target cross-compiles without a C toolchain
+export CGO_ENABLED=0
+
 rm -rf ${BUILD_DIR}
 mkdir -p ${BUILD_DIR}
 

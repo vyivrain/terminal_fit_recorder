@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
+	_ "modernc.org/sqlite"
 
 	"terminal_fit_recorder/internal/db"
 )
@@ -88,7 +88,7 @@ func TestProfileMigrationAssignsExistingHistoryToMine(t *testing.T) {
 	inProjectRoot(t)
 
 	databasePath := filepath.Join(t.TempDir(), "existing.sqlite")
-	legacy, err := sql.Open("sqlite3", databasePath)
+	legacy, err := sql.Open("sqlite", databasePath)
 	require.NoError(t, err)
 
 	for version := 1; version <= 7; version++ {

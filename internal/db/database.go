@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/sqlite3"
+	"github.com/golang-migrate/migrate/v4/database/sqlite"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 
 	migrationfiles "terminal_fit_recorder/migrations"
 )
@@ -16,17 +16,24 @@ type DB struct {
 	conn *sql.DB
 }
 
+// The driver is pure Go (no cgo), so release binaries cross-compile for every
+// platform from one machine.
+//
+// _time_format=sqlite stores time.Time as "2006-01-02 15:04:05.999999999-07:00",
+// the format earlier releases wrote and that SQLite's DATE() understands.
+// busy_timeout lets the TUI, CLI commands, and the MCP server hold the same
+// file open at once, waiting for a competing write instead of failing.
+const connectionParams = "_time_format=sqlite&_pragma=busy_timeout(5000)"
+
 func New(dbPath string) (*DB, error) {
-	// For in-memory databases, use shared cache mode so all connections see the same data
 	if dbPath == ":memory:" {
-		dbPath = "file::memory:?cache=shared"
+		// Shared cache so all connections see the same in-memory database
+		dbPath = "file::memory:?cache=shared&" + connectionParams
 	} else {
-		// The TUI, CLI commands, and the MCP server may hold the same file
-		// open at once; wait for a competing write instead of failing.
-		dbPath += "?_busy_timeout=5000"
+		dbPath = "file:" + dbPath + "?" + connectionParams
 	}
 
-	conn, err := sql.Open("sqlite3", dbPath)
+	conn, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -54,15 +61,15 @@ func (db *DB) runMigrations() error {
 		return fmt.Errorf("could not load embedded migrations: %v", err)
 	}
 
-	driver, err := sqlite3.WithInstance(db.conn, &sqlite3.Config{})
+	driver, err := sqlite.WithInstance(db.conn, &sqlite.Config{})
 	if err != nil {
-		return fmt.Errorf("could not create sqlite3 driver: %v", err)
+		return fmt.Errorf("could not create sqlite driver: %v", err)
 	}
 
 	m, err := migrate.NewWithInstance(
 		"iofs",
 		source,
-		"sqlite3",
+		"sqlite",
 		driver,
 	)
 	if err != nil {
