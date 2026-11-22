@@ -160,6 +160,7 @@ func TestGenerateCommand_Execute_FullFlow_UserSavesWorkout(t *testing.T) {
 	// Create command and inject mocks
 	cmd := NewGenerateCommand(3)
 	cmd.InputProvider = mockInput
+	cmd.VideoFinder = &fakePlanVideoFinder{urls: map[string]string{"Bench Press": "https://www.youtube.com/watch?v=bench"}}
 
 	// Execute the command
 	err = cmd.Execute(database, mockOllama)
@@ -182,6 +183,19 @@ func TestGenerateCommand_Execute_FullFlow_UserSavesWorkout(t *testing.T) {
 	workouts, err := database.GetAllWorkouts()
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(workouts), "Should have 2 workouts: original + generated")
+
+	// Every generated exercise is saved with a video link: a direct clip when
+	// one is found, otherwise a YouTube search link
+	videos := map[string]string{}
+	for _, workout := range workouts {
+		for _, exercise := range workout.Exercises {
+			if exercise.YoutubeURL != "" {
+				videos[exercise.Name] = exercise.YoutubeURL
+			}
+		}
+	}
+	assert.Equal(t, "https://www.youtube.com/watch?v=bench", videos["Bench Press"])
+	assert.Equal(t, youtubeSearchURL("Push-ups"), videos["Push-ups"])
 }
 
 func TestGenerateCommand_Execute_FullFlow_UserDoesNotSave(t *testing.T) {
@@ -238,6 +252,7 @@ func TestGenerateCommand_Execute_FullFlow_UserDoesNotSave(t *testing.T) {
 	// Create command with mocks
 	cmd := NewGenerateCommand(2)
 	cmd.InputProvider = mockInput
+	cmd.VideoFinder = &fakePlanVideoFinder{}
 
 	// Execute
 	err = cmd.Execute(database, mockOllama)
@@ -288,6 +303,7 @@ func TestGenerateCommand_Execute_FullFlow_UserCancels(t *testing.T) {
 	// Execute
 	cmd := NewGenerateCommand(1)
 	cmd.InputProvider = mockInput
+	cmd.VideoFinder = &fakePlanVideoFinder{}
 	err = cmd.Execute(database, mockOllama)
 
 	assert.NoError(t, err)

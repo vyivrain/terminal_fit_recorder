@@ -10,17 +10,20 @@ import (
 	"terminal_fit_recorder/internal/db"
 	"terminal_fit_recorder/internal/prompt"
 	"terminal_fit_recorder/internal/ui"
+	"terminal_fit_recorder/internal/youtube"
 )
 
 type GenerateCommand struct {
 	ExerciseCount int
 	InputProvider ui.InputProvider
+	VideoFinder   planVideoFinder
 }
 
 func NewGenerateCommand(exerciseCount int) *GenerateCommand {
 	return &GenerateCommand{
 		ExerciseCount: exerciseCount,
 		InputProvider: ui.NewDefaultInputProvider(),
+		VideoFinder:   youtube.NewFinder(3),
 	}
 }
 
@@ -72,6 +75,11 @@ func (cmd *GenerateCommand) Execute(database *db.DB, ollamaClient api.OllamaClie
 	generatedWorkout, err := api.ParseWorkoutResponse(response)
 	if err != nil {
 		return fmt.Errorf("error parsing workout response: %v", err)
+	}
+
+	videoErrors := populatePlanVideos(ctx, generatedWorkout, workouts, cmd.VideoFinder)
+	if len(videoErrors) > 0 {
+		fmt.Printf("Note: used YouTube search links for %d exercise(s) because direct video lookup failed.\n\n", len(videoErrors))
 	}
 
 	// Format and display the workout

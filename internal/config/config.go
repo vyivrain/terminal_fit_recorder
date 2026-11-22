@@ -7,14 +7,17 @@ import (
 type Config struct {
 	OllamaHost   string
 	OllamaModel  string
+	OllamaAPIKey string
 	OllamaPrompt string
 }
 
 // Load reads configuration from environment variables with sensible defaults
 func Load() *Config {
 	cfg := &Config{
-		OllamaHost:  getEnv("TERMINAL_FIT_RECORDER_OLLAMA_HOST", "http://192.168.1.39:11434"),
-		OllamaModel: getEnv("TERMINAL_FIT_RECORDER_OLLAMA_MODEL", "qwen3-coder:480b-cloud"),
+		OllamaHost:  getEnv("TERMINAL_FIT_RECORDER_OLLAMA_HOST", "https://ollama.com"),
+		OllamaModel: getEnv("TERMINAL_FIT_RECORDER_OLLAMA_MODEL", "glm-5.3-flash:cloud"),
+		// Falls back to Ollama's own OLLAMA_API_KEY so an existing key works as-is
+		OllamaAPIKey: getEnv("TERMINAL_FIT_RECORDER_OLLAMA_API_KEY", os.Getenv("OLLAMA_API_KEY")),
 		OllamaPrompt: getEnv("TERMINAL_FIT_RECORDER_OLLAMA_PROMPT", `Act as the person's coach and improve their training when the data supports it; do not just copy the last session. If there is no history, suggest a beginner workout.
 			Aim for about 3 sessions per week: 2 strength and 1 cardio. Pick this workout's type to keep that balance from the recent sessions, and never work the same primary muscle group two sessions in a row.
 			Across the week the strength sessions together must cover all major muscle groups (chest, back, shoulders, arms, quadriceps, hamstrings and glutes, core), while each single session targets only part of that using a split scaled to the number of strength sessions: 1 means full body, 2 means an upper/lower split, 3 means push/pull/legs. With 2 strength sessions make this workout the upper or lower half the recent sessions did not already cover so the pair completes full coverage. Cardio should engage the major muscle groups.

@@ -69,13 +69,19 @@ func main() {
 
 	// Explicit commands remain available for scripts and existing workflows.
 	cfg := config.Load()
-	ollamaClient := api.NewClient(cfg.OllamaHost, cfg.OllamaModel, cfg.OllamaPrompt)
+	ollamaClient := api.NewClient(cfg.OllamaHost, cfg.OllamaModel, cfg.OllamaAPIKey, cfg.OllamaPrompt)
 
 	// Parse command first to check if it's init
 	cmd, err := commands.ParseArgs(os.Args)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
+	}
+
+	// Help needs no database, so it works before 'exercise init'
+	if cmd.Name() == "help" {
+		cmd.Execute(nil, ollamaClient)
+		return
 	}
 
 	// Check if database exists

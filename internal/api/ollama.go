@@ -22,16 +22,38 @@ var thinkTagRegex = regexp.MustCompile(`(?s)<think>.*?</think>\s*`)
 type Client struct {
 	host         string
 	model        string
+	apiKey       string
 	CustomPrompt string
 }
 
-// NewClient creates a new Ollama client with the given host and model
-func NewClient(host, model, CustomPrompt string) *Client {
+// NewClient creates a new Ollama client with the given host and model.
+// apiKey is optional; when set it is sent as a Bearer token (needed for https://ollama.com).
+func NewClient(host, model, apiKey, CustomPrompt string) *Client {
 	return &Client{
 		host:         host,
 		model:        model,
+		apiKey:       apiKey,
 		CustomPrompt: CustomPrompt,
 	}
+}
+
+// newGenerateRequest builds a POST to /api/generate with JSON and optional auth headers
+func (c *Client) newGenerateRequest(ctx context.Context, reqBody OllamaRequest) (*http.Request, error) {
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/api/generate", strings.TrimRight(c.host, "/"))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	return req, nil
 }
 
 // stripThinkingTags removes <think>...</think> tags from DeepSeek-R1 responses
@@ -54,24 +76,14 @@ type OllamaResponse struct {
 
 // SendPrompt sends a prompt to Ollama and returns the response
 func (c *Client) SendPrompt(ctx context.Context, prompt string) (string, error) {
-	url := fmt.Sprintf("%s/api/generate", c.host)
-
-	reqBody := OllamaRequest{
+	req, err := c.newGenerateRequest(ctx, OllamaRequest{
 		Model:  c.model,
 		Prompt: prompt,
 		Stream: false,
-	}
-
-	jsonData, err := json.Marshal(reqBody)
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -101,24 +113,14 @@ func (c *Client) SendPrompt(ctx context.Context, prompt string) (string, error) 
 // SendPromptStream sends a prompt to Ollama and streams the response
 // Prints response in real-time and returns the complete response
 func (c *Client) SendPromptStream(ctx context.Context, prompt string) (string, error) {
-	url := fmt.Sprintf("%s/api/generate", c.host)
-
-	reqBody := OllamaRequest{
+	req, err := c.newGenerateRequest(ctx, OllamaRequest{
 		Model:  c.model,
 		Prompt: prompt,
 		Stream: true, // Enable streaming
-	}
-
-	jsonData, err := json.Marshal(reqBody)
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)

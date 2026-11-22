@@ -19,38 +19,54 @@ var commandMap = map[string]map[string]CommandFactory{
 		"generate": func(args []string) Command { return NewGenerateCommandWrapper(args) },
 		"plan":     func(args []string) Command { return NewPlanCommand(args[3:]...) },
 		"videos":   func(args []string) Command { return NewVideosCommand(args[3:]...) },
-		"help":     func(args []string) Command { return NewHelpCommand() },
+		"help":     func(args []string) Command { return NewHelpCommand("exercise") },
 	},
 	"profile": {
 		"create":   func(args []string) Command { return NewCreateProfileCommand(args[3:]...) },
 		"use":      func(args []string) Command { return NewUseProfileCommand(args[3:]...) },
 		"list":     func(args []string) Command { return NewListProfilesCommand(args[3:]...) },
 		"describe": func(args []string) Command { return NewDescribeProfileCommand(args[3:]...) },
-		"help":     func(args []string) Command { return NewHelpCommand() },
+		"help":     func(args []string) Command { return NewHelpCommand("profile") },
 	},
 	"ai": {
 		"test": func(args []string) Command { return NewAITestCommand(args[3:]...) },
-		"help": func(args []string) Command { return NewHelpCommand() },
+		"help": func(args []string) Command { return NewHelpCommand("ai") },
 	},
 }
 
+const helpHint = "Run 'terminal_fit_recorder help' to see all commands."
+
 func ParseArgs(args []string) (Command, error) {
-	if len(args) < 3 {
-		return nil, fmt.Errorf("usage: terminal_fit_recorder <exercise|profile|ai> <command>")
+	if len(args) < 2 {
+		return NewHelpCommand(), nil
 	}
 
 	action := args[1]
-	target := args[2]
+	switch action {
+	case "help", "-h", "--help":
+		if len(args) > 2 {
+			if _, ok := commandMap[args[2]]; ok {
+				return NewHelpCommand(args[2]), nil
+			}
+		}
+		return NewHelpCommand(), nil
+	}
 
 	// Look up command in the map
 	subCommands, ok := commandMap[action]
 	if !ok {
-		return nil, fmt.Errorf("unknown command: %s", action)
+		return nil, fmt.Errorf("unknown command: %s\n%s", action, helpHint)
 	}
 
+	// A bare group, or a group with -h/--help, shows that group's commands
+	if len(args) < 3 || args[2] == "-h" || args[2] == "--help" {
+		return NewHelpCommand(action), nil
+	}
+
+	target := args[2]
 	factory, ok := subCommands[target]
 	if !ok {
-		return nil, fmt.Errorf("unknown %s subcommand: %s", action, target)
+		return nil, fmt.Errorf("unknown %s subcommand: %s\nRun 'terminal_fit_recorder help %s' to see its commands.", action, target, action)
 	}
 
 	// Create command using factory

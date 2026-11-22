@@ -199,9 +199,12 @@ The connected agent is already an LLM, so it plans workouts itself and saves the
 The legacy `exercise generate` command uses these environment variables for Ollama configuration. They do not affect TUI generation:
 
 ```bash
-export TERMINAL_FIT_RECORDER_OLLAMA_HOST="http://192.168.1.39:11434"
+export TERMINAL_FIT_RECORDER_OLLAMA_HOST="https://ollama.com"
 
-export TERMINAL_FIT_RECORDER_OLLAMA_MODEL="qwen3-coder:480b-cloud"
+export TERMINAL_FIT_RECORDER_OLLAMA_MODEL="glm-5.3-flash:cloud"
+
+# Required for https://ollama.com (falls back to OLLAMA_API_KEY). Not needed for a local Ollama
+export TERMINAL_FIT_RECORDER_OLLAMA_API_KEY="your-ollama-api-key"
 
 export TERMINAL_FIT_RECORDER_OLLAMA_PROMPT="Your custom prompt here"
 ```
