@@ -28,6 +28,11 @@ var commandMap = map[string]map[string]CommandFactory{
 		"describe": func(args []string) Command { return NewDescribeProfileCommand(args[3:]...) },
 		"help":     func(args []string) Command { return NewHelpCommand("profile") },
 	},
+	"trainer": {
+		"review": func(args []string) Command { return NewTrainerReviewCommand(args[3:]...) },
+		"show":   func(args []string) Command { return NewTrainerShowCommand(args[3:]...) },
+		"help":   func(args []string) Command { return NewHelpCommand("trainer") },
+	},
 	"ai": {
 		"test": func(args []string) Command { return NewAITestCommand(args[3:]...) },
 		"help": func(args []string) Command { return NewHelpCommand("ai") },

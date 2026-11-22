@@ -20,7 +20,7 @@ import (
 
 type fakeGenerator struct{}
 
-func (fakeGenerator) Generate(context.Context, db.AIModel, []db.WorkoutWithExercises, string) (*ai.GenerationResult, error) {
+func (fakeGenerator) Generate(context.Context, db.AIModel, []db.WorkoutWithExercises, string, string) (*ai.GenerationResult, error) {
 	return nil, errors.New("model endpoint unavailable")
 }
 

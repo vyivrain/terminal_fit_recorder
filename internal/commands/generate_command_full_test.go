@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // findProjectRoot walks up the directory tree to find the project root
@@ -352,5 +354,35 @@ func TestMockOllamaClient_VerifyResponseStructure(t *testing.T) {
 	assert.Equal(t, "Deadlifts", workout.Exercises[0].Name)
 	assert.Equal(t, 120, workout.Exercises[0].Weight)
 
+	mockOllama.AssertExpectations(t)
+}
+
+func TestGenerateCommand_Execute_IncludesTrainerGuidance(t *testing.T) {
+	database, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	workout := db.WorkoutWithExercises{
+		Workout:   db.Workout{WorkoutType: "pull", WorkoutDate: time.Now()},
+		Exercises: []db.Exercise{{Name: "Deadlifts", Weight: 120, Repetitions: 5, Sets: 3}},
+	}
+	require.NoError(t, database.SaveGeneratedWorkout(&workout))
+	profile, err := database.GetActiveProfile()
+	require.NoError(t, err)
+	_, err = database.SaveTrainerReview(profile.ID, "Deadlifts stalled at 120 kg — try 3x3 at 125 kg")
+	require.NoError(t, err)
+
+	mockOllama := new(MockOllamaClient)
+	mockOllama.On("GetCustomPrompt").Return("")
+	mockOllama.On("SendPromptStream", mock.Anything, mock.MatchedBy(func(prompt string) bool {
+		return strings.Contains(prompt, "TRAINER_GUIDANCE\nDeadlifts stalled at 120 kg — try 3x3 at 125 kg\nEND_TRAINER_GUIDANCE")
+	})).Return(`{"date": "2026-01-05", "type": "pull", "exercises": [{"name": "Deadlifts", "weight": 125, "reps": 3, "sets": 3, "duration": "-"}]}`, nil)
+
+	mockInput := new(MockInputProvider)
+	mockInput.On("GetInputWithType", mock.Anything, mock.Anything, mock.Anything).Return("", true)
+
+	cmd := NewGenerateCommand(1)
+	cmd.InputProvider = mockInput
+	cmd.VideoFinder = &fakePlanVideoFinder{}
+	require.NoError(t, cmd.Execute(database, mockOllama))
 	mockOllama.AssertExpectations(t)
 }

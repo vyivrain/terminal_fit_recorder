@@ -46,7 +46,7 @@ Follow the user prompt's workout constraints and return only its requested JSON 
 )
 
 type Generator interface {
-	Generate(ctx context.Context, model db.AIModel, history []db.WorkoutWithExercises, profileDescription string) (*GenerationResult, error)
+	Generate(ctx context.Context, model db.AIModel, history []db.WorkoutWithExercises, profileDescription, trainerGuidance string) (*GenerationResult, error)
 	Refine(ctx context.Context, model db.AIModel, workout *db.WorkoutWithExercises, instruction, profileDescription string) (*GenerationResult, error)
 	ImportNotes(ctx context.Context, model db.AIModel, notes string, history []db.WorkoutWithExercises) ([]*db.WorkoutWithExercises, error)
 }
@@ -154,9 +154,9 @@ func NewCLIGenerator() *CLIGenerator {
 	}
 }
 
-func (g *CLIGenerator) Generate(ctx context.Context, model db.AIModel, history []db.WorkoutWithExercises, profileDescription string) (*GenerationResult, error) {
+func (g *CLIGenerator) Generate(ctx context.Context, model db.AIModel, history []db.WorkoutWithExercises, profileDescription, trainerGuidance string) (*GenerationResult, error) {
 	expectedDate := g.now().Format("2006-01-02")
-	output, err := g.request(ctx, model, generationPrompt(history, expectedDate, profileDescription), workoutResponseSchema)
+	output, err := g.request(ctx, model, generationPrompt(history, expectedDate, profileDescription, trainerGuidance), workoutResponseSchema)
 	if err != nil {
 		return nil, err
 	}

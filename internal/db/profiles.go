@@ -270,6 +270,9 @@ func (db *DB) DeleteProfile(profileID int) (*Profile, error) {
 	if _, err := tx.Exec(`DELETE FROM workouts WHERE profile_id = ?`, profileID); err != nil {
 		return nil, err
 	}
+	if _, err := tx.Exec(`DELETE FROM trainer_reviews WHERE profile_id = ?`, profileID); err != nil {
+		return nil, err
+	}
 	if _, err := tx.Exec(`DELETE FROM profiles WHERE id = ?`, profileID); err != nil {
 		return nil, err
 	}

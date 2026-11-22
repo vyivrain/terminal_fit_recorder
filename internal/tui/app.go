@@ -238,6 +238,10 @@ type App struct {
 	// alongside the current preview. It is shown for review and only written
 	// to the profile when the previewed workout(s) are saved.
 	pendingProfileUpdate string
+	// generationReview is the trainer review the current generated preview
+	// was coached with, shown so its influence is visible. Nil when the
+	// trainer has not reviewed this profile yet.
+	generationReview *db.TrainerReview
 
 	input              textinput.Model
 	profileInputAction profileInputAction
@@ -853,6 +857,7 @@ func (app *App) clearPreview() {
 	app.previewIndex = 0
 	app.previewOrigin = aiGenerate
 	app.pendingProfileUpdate = ""
+	app.generationReview = nil
 }
 
 func (app *App) setViewedWorkout(workout *db.WorkoutWithExercises) {
@@ -907,13 +912,27 @@ func (app *App) startGeneration(refine bool) (tea.Model, tea.Cmd) {
 	if app.activeProfile != nil {
 		profileDescription = app.activeProfile.Description
 	}
+	var trainerGuidance string
+	if !refine {
+		review, err := app.database.GetLatestTrainerReview()
+		if err != nil {
+			cancel()
+			app.loading = false
+			app.modalError = "Could not load trainer guidance\n\n" + err.Error()
+			return app, nil
+		}
+		app.generationReview = review
+		if review != nil {
+			trainerGuidance = review.Guidance
+		}
+	}
 	command := func() tea.Msg {
 		var result *ai.GenerationResult
 		var err error
 		if refine {
 			result, err = app.generator.Refine(ctx, selectedModel, preview, prompt, profileDescription)
 		} else {
-			result, err = app.generator.Generate(ctx, selectedModel, history, profileDescription)
+			result, err = app.generator.Generate(ctx, selectedModel, history, profileDescription, trainerGuidance)
 		}
 		operation := aiGenerate
 		if refine {
@@ -1243,6 +1262,9 @@ func (app *App) View() string {
 				mutedStyle.Width(width).Render(app.pendingProfileUpdate) + "\n" +
 				mutedStyle.Render("Saved together with this workout (s)")
 			body = callout + "\n\n" + body
+		}
+		if app.previewOrigin == aiGenerate && app.generationReview != nil {
+			body = mutedStyle.Render("Coached with trainer guidance from "+app.generationReview.CreatedAt.Format("Jan 2")) + "\n\n" + body
 		}
 		if app.previewOrigin == aiImport {
 			counter := fmt.Sprintf("Import preview  ·  workout %d of %d", app.previewIndex+1, len(app.previewWorkouts))

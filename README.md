@@ -7,6 +7,7 @@ A keyboard-first terminal application for tracking workouts and generating plans
 - **Full-screen terminal UI** - Browse, create, inspect, and delete workouts without memorizing commands
 - **Interactive workout logging** - Save strength and cardio workouts with detailed exercise information
 - **AI-powered workout generation** - Generate and safely refine workout suggestions using an installed AI CLI
+- **Weekly AI trainer** - Reviews your recent workouts and notes in the background and steers every generated workout
 - **Workout management** - View, edit, and delete your workout history
 - **Separate profiles** - Keep each person's workouts and exercise suggestions isolated
 - **Smart exercise tracking** - Autocomplete for exercise names and duration tracking for cardio
@@ -158,6 +159,19 @@ terminal_fit_recorder profile create <name>  # Create an empty profile and selec
 terminal_fit_recorder profile use <name>     # Select an existing profile
 terminal_fit_recorder profile list           # List profiles; * marks the active one
 terminal_fit_recorder profile help           # Display all commands
+```
+
+### AI trainer
+
+About once a week, the AI trainer reviews the active profile's recent workouts and their notes. It also reads its own previous guidance, and then writes new guidance. Every workout generation path (TUI, `exercise plan`, and `exercise generate`) adds this guidance to its prompt after the built-in coaching rules and the profile description.
+
+Any launch of the app starts the review automatically when it is due. A review is due when the last one is at least 7 days old and you completed or edited workouts since then. The review runs as a detached background process with the selected TUI AI model, so the app works as usual. The background output goes to `~/.terminal_fit_recorder/trainer.log`. If a background review fails, the app retries it at most once every 6 hours.
+
+To write feedback for the trainer, add it to a workout's notes, for example with `exercise edit last notes "<text>"`.
+
+```bash
+terminal_fit_recorder trainer show    # Show the current guidance
+terminal_fit_recorder trainer review  # Run a review now
 ```
 
 ## MCP Server (AI agents)

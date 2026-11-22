@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"terminal_fit_recorder/internal/ai"
 	"terminal_fit_recorder/internal/api"
@@ -15,6 +16,7 @@ import (
 	"terminal_fit_recorder/internal/config"
 	"terminal_fit_recorder/internal/db"
 	"terminal_fit_recorder/internal/mcpserver"
+	"terminal_fit_recorder/internal/trainer"
 	"terminal_fit_recorder/internal/tui"
 )
 
@@ -44,6 +46,7 @@ func main() {
 		}
 		defer database.Close()
 
+		startTrainerReviewIfDue(database, configDir)
 		if err := tui.Run(database, ai.NewCLIGenerator()); err != nil {
 			log.Fatal("TUI failed:", err)
 		}
@@ -112,8 +115,19 @@ func main() {
 		os.Exit(0)
 	}()
 
+	if cmd.Name() != "init" && cmd.Name() != "trainer review" {
+		startTrainerReviewIfDue(database, configDir)
+	}
+
 	err = cmd.Execute(database, ollamaClient)
 	if err != nil {
 		log.Fatal("Error executing command:", err)
 	}
+}
+
+// startTrainerReviewIfDue launches the weekly AI trainer review in the
+// background when one is due. It is best effort: a failure here must never
+// stop the command the person actually ran, and a later launch retries.
+func startTrainerReviewIfDue(database *db.DB, configDir string) {
+	_, _ = trainer.SpawnIfDue(database, configDir, time.Now())
 }

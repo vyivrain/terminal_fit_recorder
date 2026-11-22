@@ -8,7 +8,7 @@ import (
 )
 
 // BuildPrompt creates a complete prompt for the LLM with workout data and user question
-func BuildPrompt(workouts []db.WorkoutWithExercises, exerciseCount int, customPrompt string) string {
+func BuildPrompt(workouts []db.WorkoutWithExercises, exerciseCount int, customPrompt, trainerGuidance string) string {
 	var sb strings.Builder
 
 	sb.WriteString(
@@ -36,6 +36,7 @@ func BuildPrompt(workouts []db.WorkoutWithExercises, exerciseCount int, customPr
 		}
 		`,
 	)
+	sb.WriteString(TrainerGuidanceSection(trainerGuidance))
 	sb.WriteString(formatWorkoutData(workouts))
 	return sb.String()
 }

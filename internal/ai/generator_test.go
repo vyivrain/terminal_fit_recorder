@@ -120,7 +120,7 @@ func TestClassifyRunErrorNamesTheRealCause(t *testing.T) {
 }
 
 func TestGenerationPromptIncludesCoachingPolicy(t *testing.T) {
-	prompt := generationPrompt(nil, "2026-09-06", "")
+	prompt := generationPrompt(nil, "2026-09-06", "", "")
 	for _, phrase := range []string{
 		"2 strength and 1 cardio",
 		"upper/lower split",
@@ -142,7 +142,7 @@ func TestGenerateAttachesCoachingNoteFromMessage(t *testing.T) {
 	withNote := &CLIGenerator{now: now, executor: &fakeExecutor{
 		output: `{"accepted":true,"message":"Squat stalled at 100 kg×5 for 3 sessions — bumped to 102.5 kg.","workout":{"date":"2026-09-06","type":"strength","exercises":[{"name":"Squat","weight":102,"reps":5,"sets":5,"duration":0,"distance":0}]},"profileUpdate":""}`,
 	}}
-	result, err := withNote.Generate(context.Background(), model, nil, "")
+	result, err := withNote.Generate(context.Background(), model, nil, "", "")
 	require.NoError(t, err)
 	require.Equal(t, "Squat stalled at 100 kg×5 for 3 sessions — bumped to 102.5 kg.", result.Workout.Workout.Notes)
 	require.Empty(t, result.ProfileUpdate)
@@ -151,7 +151,7 @@ func TestGenerateAttachesCoachingNoteFromMessage(t *testing.T) {
 	withoutNote := &CLIGenerator{now: now, executor: &fakeExecutor{
 		output: `{"accepted":true,"message":"","workout":{"date":"2026-09-06","type":"strength","exercises":[{"name":"Squat","weight":100,"reps":5,"sets":5,"duration":0,"distance":0}]}}`,
 	}}
-	plain, err := withoutNote.Generate(context.Background(), model, nil, "")
+	plain, err := withoutNote.Generate(context.Background(), model, nil, "", "")
 	require.NoError(t, err)
 	require.Empty(t, plain.Workout.Workout.Notes)
 }
@@ -163,18 +163,18 @@ func TestGenerateSurfacesSuggestedProfileUpdate(t *testing.T) {
 	generator := &CLIGenerator{now: now, executor: &fakeExecutor{
 		output: `{"accepted":true,"message":"","workout":{"date":"2026-09-06","type":"strength","exercises":[{"name":"Squat","weight":100,"reps":5,"sets":5,"duration":0,"distance":0}]},"profileUpdate":"Bad left knee as of Sept 2026 — avoid deep squats and lunges."}`,
 	}}
-	result, err := generator.Generate(context.Background(), model, nil, "")
+	result, err := generator.Generate(context.Background(), model, nil, "", "")
 	require.NoError(t, err)
 	require.Equal(t, "Bad left knee as of Sept 2026 — avoid deep squats and lunges.", result.ProfileUpdate)
 }
 
 func TestGenerationPromptIncludesProfileDescription(t *testing.T) {
-	prompt := generationPrompt(nil, "2026-09-06", "Bad left knee — avoid deep squats and lunges.")
+	prompt := generationPrompt(nil, "2026-09-06", "Bad left knee — avoid deep squats and lunges.", "")
 	require.Contains(t, prompt, "PROFILE")
 	require.Contains(t, prompt, "Bad left knee — avoid deep squats and lunges.")
 	require.Contains(t, prompt, "substitute away from anything it rules out")
 
-	withoutProfile := generationPrompt(nil, "2026-09-06", "")
+	withoutProfile := generationPrompt(nil, "2026-09-06", "", "")
 	require.NotContains(t, withoutProfile, "END_PROFILE")
 }
 
@@ -197,7 +197,7 @@ func TestOpenCodeRequestUsesTemporaryNoToolsAgent(t *testing.T) {
 		Provider:    db.ModelProviderOpenCode,
 		ModelID:     "opencode-go/glm-5.3",
 		DisplayName: "GLM 5.3 · OpenCode",
-	}, nil, "")
+	}, nil, "", "")
 	require.NoError(t, err)
 	require.Contains(t, executor.agent, "mode: primary")
 	require.Contains(t, executor.agent, "steps: 2")
@@ -273,7 +273,7 @@ func TestGenerateParsesSchemaValidatedWorkout(t *testing.T) {
 		Provider:    db.ModelProviderCodex,
 		ModelID:     "gpt-5.6-sol",
 		DisplayName: "GPT-5.6 Sol · Codex",
-	}, nil, "")
+	}, nil, "", "")
 	require.NoError(t, err)
 	require.Equal(t, "Squat", result.Workout.Exercises[0].Name)
 	require.Equal(t, "planned", result.Workout.Workout.Status)
@@ -347,7 +347,7 @@ func TestExecutorErrorsAreReturned(t *testing.T) {
 		Provider:    db.ModelProviderOpenCode,
 		ModelID:     "opencode-go/glm-5.3",
 		DisplayName: "GLM 5.3 · OpenCode",
-	}, nil, "")
+	}, nil, "", "")
 	require.ErrorContains(t, err, "endpoint unavailable")
 }
 

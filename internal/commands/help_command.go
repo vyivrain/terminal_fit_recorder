@@ -48,6 +48,13 @@ var helpSections = []helpSection{
 		},
 	},
 	{
+		group: "trainer",
+		title: "AI trainer",
+		commands: func() []Command {
+			return []Command{NewTrainerReviewCommand(), NewTrainerShowCommand()}
+		},
+	},
+	{
 		group: "ai",
 		title: "AI diagnostics",
 		commands: func() []Command {
@@ -78,7 +85,7 @@ func (cmd *HelpCommand) Validate() error {
 }
 
 func (cmd *HelpCommand) HelpManual() string {
-	return appName + " help [exercise|profile|ai]\n    Show this help, or only one command group."
+	return appName + " help [exercise|profile|trainer|ai]\n    Show this help, or only one command group."
 }
 
 func (cmd *HelpCommand) Execute(database *db.DB, ollamaClient api.OllamaClient) error {

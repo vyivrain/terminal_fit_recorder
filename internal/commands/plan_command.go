@@ -76,11 +76,16 @@ func (cmd *PlanCommand) Execute(database *db.DB, _ api.OllamaClient) error {
 		profileDescription = profile.Description
 	}
 
+	trainerGuidance, err := latestTrainerGuidance(database)
+	if err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), planTimeout)
 	defer cancel()
 
 	fmt.Printf("Generating workout with %s...\n\n", model.DisplayName)
-	result, err := ai.NewCLIGenerator().Generate(ctx, *model, history, profileDescription)
+	result, err := ai.NewCLIGenerator().Generate(ctx, *model, history, profileDescription, trainerGuidance)
 	if err != nil {
 		return fmt.Errorf("could not generate workout: %w", err)
 	}

@@ -59,8 +59,13 @@ func (cmd *GenerateCommand) Execute(database *db.DB, ollamaClient api.OllamaClie
 		return fmt.Errorf("no workout data found. Please save some workouts first")
 	}
 
+	trainerGuidance, err := latestTrainerGuidance(database)
+	if err != nil {
+		return err
+	}
+
 	// Build prompt with workout data
-	promptText := prompt.BuildPrompt(workouts, cmd.ExerciseCount, ollamaClient.GetCustomPrompt())
+	promptText := prompt.BuildPrompt(workouts, cmd.ExerciseCount, ollamaClient.GetCustomPrompt(), trainerGuidance)
 
 	fmt.Println("Sending request to Ollama...")
 	fmt.Println()
